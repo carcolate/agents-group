@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>调用记录</title>
+    <link rel="stylesheet" href="css/common.css">
+</head>
+<body>
+<header class="app-header">
+    <div class="brand">Carcolate · Copilot Agent 管理后台</div>
+    <nav class="nav">
+        <a href="agent.html">Agent 管理</a>
+        <a href="rag.html">知识库管理</a>
+        <a href="playground.html">在线对话</a>
+        <a href="history.html" class="active">调用记录</a>
+    </nav>
+</header>
+<main class="container">
+    <section class="card">
+        <div class="toolbar">
+            <h2>Copilot 调用记录</h2>
+            <div class="toolbar-actions">
+                <select id="filterAgent">
+                    <option value="">全部 Agent</option>
+                </select>
+                <select id="filterStatus">
+                    <option value="">全部状态</option>
+                    <option value="SUCCESS">SUCCESS</option>
+                    <option value="FAILED">FAILED</option>
+                </select>
+                <input id="searchKeyword" placeholder="按用户消息搜索" />
+                <input id="searchUuid" placeholder="按 UUID 精确" />
+                <button onclick="firstPage()">查询</button>
+            </div>
+        </div>
+        <table class="table">
+            <thead>
+            <tr>
+                <th style="width:160px;">时间</th>
+                <th style="width:130px;">Agent</th>
+                <th>用户消息</th>
+                <th>最终回复</th>
+                <th style="width:70px;">状态</th>
+                <th style="width:60px;">轮次</th>
+                <th style="width:80px;">步骤数</th>
+                <th style="width:80px;">耗时</th>
+                <th style="width:90px;">操作</th>
+            </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+        </table>
+        <div class="pager">
+            <button onclick="prevPage()">上一页</button>
+            <span id="pageInfo">1 / 1</span>
+            <button onclick="nextPage()">下一页</button>
+            <span class="total">共 <span id="total">0</span> 条</span>
+            <span style="margin-left:16px;">每页</span>
+            <select id="pageSizeSel" onchange="changePageSize()">
+                <option value="10">10</option>
+                <option value="20" selected>20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+            </select>
+            <span>条</span>
+        </div>
+    </section>
+</main>
+
+<div id="detailModal" class="modal hide">
+    <div class="modal-mask" onclick="closeDetail()"></div>
+    <div class="modal-body wide">
+        <div class="modal-header">
+            <h3>调用详情</h3>
+            <span class="close" onclick="closeDetail()">×</span>
+        </div>
+        <div class="modal-content">
+            <div id="detailMeta" class="desc"></div>
+            <div id="detailFinal" class="final-reply hide" style="margin-top:12px;">
+                <h3>最终回复</h3>
+                <div id="detailFinalText"></div>
+            </div>
+            <h3 style="margin-top:18px;">ReAct 轨迹</h3>
+            <div id="detailSteps" class="steps"></div>
+            <p class="desc" id="detailEmpty" style="display:none;">Redis 中已无该任务快照（已过期或未启动）。</p>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeDetail()">关闭</button>
+        </div>
+    </div>
+</div>
+
+<script src="js/common.js"></script>
+<script src="js/history.js"></script>
+</body>
+</html>
