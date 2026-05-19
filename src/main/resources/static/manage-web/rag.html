@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知识库管理</title>
+    <link rel="stylesheet" href="css/common.css">
+</head>
+<body>
+<header class="app-header">
+    <div class="brand">Carcolate · Copilot Agent 管理后台</div>
+    <nav class="nav">
+        <a href="agent.html">Agent 管理</a>
+        <a href="rag.html" class="active">知识库管理</a>
+        <a href="playground.html">在线对话</a>
+    </nav>
+</header>
+<main class="container">
+    <section class="card">
+        <div class="toolbar">
+            <h2>知识库列表</h2>
+            <div class="toolbar-actions">
+                <select id="filterAgent">
+                    <option value="">全部 Agent</option>
+                </select>
+                <input id="searchTitle" placeholder="按标题搜索" />
+                <button onclick="loadList()">查询</button>
+                <button onclick="rebuildAgent()">重建当前 Agent 向量</button>
+                <button class="primary" onclick="openEditor()">新增文档</button>
+            </div>
+        </div>
+        <table class="table">
+            <thead>
+            <tr>
+                <th style="width:200px;">ID</th>
+                <th style="width:200px;">Agent</th>
+                <th>标题</th>
+                <th style="width:80px;">状态</th>
+                <th style="width:160px;">操作</th>
+            </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+        </table>
+        <div class="pager">
+            <button onclick="prevPage()">上一页</button>
+            <span id="pageInfo">1 / 1</span>
+            <button onclick="nextPage()">下一页</button>
+            <span class="total">共 <span id="total">0</span> 条</span>
+        </div>
+    </section>
+</main>
+
+<div id="editor" class="modal hide">
+    <div class="modal-mask" onclick="closeEditor()"></div>
+    <div class="modal-body wide">
+        <div class="modal-header">
+            <h3 id="editorTitle">新增文档</h3>
+            <span class="close" onclick="closeEditor()">×</span>
+        </div>
+        <div class="modal-content">
+            <input type="hidden" id="f_id" />
+            <div class="form-row two">
+                <div>
+                    <label>所属 Agent *</label>
+                    <select id="f_agent_id"></select>
+                </div>
+                <div>
+                    <label>状态</label>
+                    <select id="f_status">
+                        <option value="1">启用</option>
+                        <option value="0">禁用</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <label>标题 *</label>
+                <input id="f_title" placeholder="例如：极石汽车产品手册 - 配置篇" />
+            </div>
+            <div class="form-row">
+                <label>文档内容 *（Markdown / 纯文本）</label>
+                <textarea id="f_content" rows="18" placeholder="文档全文，保存后会自动重新切片+向量化"></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeEditor()">取消</button>
+            <button class="primary" onclick="submitForm()">保存</button>
+        </div>
+    </div>
+</div>
+
+<script src="js/common.js"></script>
+<script src="js/rag.js"></script>
+</body>
+</html>

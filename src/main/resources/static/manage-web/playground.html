@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>在线对话</title>
+    <link rel="stylesheet" href="css/common.css">
+</head>
+<body>
+<header class="app-header">
+    <div class="brand">Carcolate · Copilot Agent 管理后台</div>
+    <nav class="nav">
+        <a href="agent.html">Agent 管理</a>
+        <a href="rag.html">知识库管理</a>
+        <a href="playground.html" class="active">在线对话</a>
+    </nav>
+</header>
+<main class="container playground">
+    <section class="card side">
+        <h2>对话参数</h2>
+        <div class="form-row">
+            <label>选择 Agent</label>
+            <select id="p_agent_id"></select>
+        </div>
+        <div class="form-row">
+            <label>更早历史消息总结</label>
+            <textarea id="p_summary" rows="4" placeholder="可选，例如：客户前几日咨询过价格，倾向 30 万左右..."></textarea>
+        </div>
+        <div class="form-row">
+            <label>近期历史消息（每行一条，可加角色前缀）</label>
+            <textarea id="p_history" rows="6" placeholder="客户: 你好&#10;客服: 您好，请问有什么可以帮您"></textarea>
+        </div>
+        <div class="form-row">
+            <label>客户当前消息</label>
+            <textarea id="p_current" rows="3" placeholder="例如：极石汽车多少钱？"></textarea>
+        </div>
+        <div class="form-row">
+            <button class="primary block" onclick="sendChat()">发送</button>
+        </div>
+        <p class="desc" id="p_status"></p>
+    </section>
+    <section class="card main">
+        <div class="toolbar">
+            <h2>ReAct 决策轨迹</h2>
+            <div class="toolbar-actions">
+                <span id="p_uuid" class="mono"></span>
+            </div>
+        </div>
+        <div id="steps" class="steps"></div>
+        <div id="final" class="final-reply hide">
+            <h3>最终回复</h3>
+            <div id="final_text"></div>
+        </div>
+    </section>
+</main>
+<script src="js/common.js"></script>
+<script src="js/playground.js"></script>
+</body>
+</html>

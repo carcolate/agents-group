@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent 管理</title>
+    <link rel="stylesheet" href="css/common.css">
+</head>
+<body>
+<header class="app-header">
+    <div class="brand">Carcolate · Copilot Agent 管理后台</div>
+    <nav class="nav">
+        <a href="agent.html" class="active">Agent 管理</a>
+        <a href="rag.html">知识库管理</a>
+        <a href="playground.html">在线对话</a>
+    </nav>
+</header>
+<main class="container">
+    <section class="card">
+        <div class="toolbar">
+            <h2>Agent 列表</h2>
+            <div class="toolbar-actions">
+                <input id="searchName" placeholder="按名称搜索" />
+                <button onclick="loadList()">查询</button>
+                <button class="primary" onclick="openEditor()">新增 Agent</button>
+            </div>
+        </div>
+        <table class="table">
+            <thead>
+            <tr>
+                <th style="width:200px;">ID</th>
+                <th>名称</th>
+                <th>身份与使命</th>
+                <th style="width:80px;">最大步数</th>
+                <th style="width:80px;">状态</th>
+                <th style="width:160px;">操作</th>
+            </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+        </table>
+        <div class="pager">
+            <button onclick="prevPage()">上一页</button>
+            <span id="pageInfo">1 / 1</span>
+            <button onclick="nextPage()">下一页</button>
+            <span class="total">共 <span id="total">0</span> 条</span>
+        </div>
+    </section>
+</main>
+
+<div id="editor" class="modal hide">
+    <div class="modal-mask" onclick="closeEditor()"></div>
+    <div class="modal-body wide">
+        <div class="modal-header">
+            <h3 id="editorTitle">新增 Agent</h3>
+            <span class="close" onclick="closeEditor()">×</span>
+        </div>
+        <div class="modal-content">
+            <input type="hidden" id="f_id" />
+            <div class="form-row">
+                <label>名称 *</label>
+                <input id="f_name" placeholder="例如：极石汽车销售专家" />
+            </div>
+            <div class="form-row">
+                <label>身份与使命</label>
+                <input id="f_mission" placeholder="一句话定位" />
+            </div>
+            <div class="form-row">
+                <label>前置 Prompt *</label>
+                <textarea id="f_pre_prompt" rows="14" placeholder="# 角色 ...\n# 操作步骤 ...\n# 注意事项 ..."></textarea>
+            </div>
+            <div class="form-row two">
+                <div>
+                    <label>模型名（留空走全局）</label>
+                    <input id="f_model_name" placeholder="例如：deepseek-chat" />
+                </div>
+                <div>
+                    <label>温度（0~1，留空走全局）</label>
+                    <input id="f_temperature" type="number" step="0.01" min="0" max="2" />
+                </div>
+            </div>
+            <div class="form-row two">
+                <div>
+                    <label>最大决策轮数</label>
+                    <input id="f_max_steps" type="number" min="1" max="20" value="6" />
+                </div>
+                <div>
+                    <label>状态</label>
+                    <select id="f_status">
+                        <option value="1">启用</option>
+                        <option value="0">禁用</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <label>备注</label>
+                <input id="f_remark" />
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeEditor()">取消</button>
+            <button class="primary" onclick="submitForm()">保存</button>
+        </div>
+    </div>
+</div>
+
+<script src="js/common.js"></script>
+<script src="js/agent.js"></script>
+</body>
+</html>
