@@ -357,6 +357,9 @@ button.block { width: 100%; padding: 10px 14px; }
     margin: 0;
     line-height: 1.5;
 }
+.modal-overlay .modal-body {
+    width: 100%;
+}
 .step-USER_INPUT { border-left-color: #2364c8; }
 .step-LLM_THINK { border-left-color: #8e44ad; }
 .step-TOOL_CALL { border-left-color: #e67e22; }

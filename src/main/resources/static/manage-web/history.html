@@ -68,19 +68,6 @@
     </section>
 </main>
 
-<div id="modal-overlay" class="modal-overlay hide">
-    <div class="modal-dialog" onclick="event.stopPropagation()">
-        <div class="modal-header">
-            <h3>完整信息</h3>
-            <button class="modal-close" onclick="closeModal()">&times;</button>
-        </div>
-        <div class="modal-body">
-            <div class="modal-meta"></div>
-            <pre></pre>
-        </div>
-    </div>
-</div>
-
 <div id="detailModal" class="modal-overlay hide" onclick="closeDetail()">
     <div class="modal-dialog modal-dialog-wide" onclick="event.stopPropagation()">
         <div class="modal-header">
@@ -99,8 +86,21 @@
                 <h3>最终回复</h3>
                 <div id="detailFinalText" style="white-space:pre-wrap;word-break:break-word;"></div>
             </div>
-            <div id="detailSteps" class="steps" style="flex:1;min-height:0;overflow:visible;"></div>
+            <div id="detailSteps" class="steps" style="flex:1;min-height:0;overflow:visible;width:100%;"></div>
             <p id="detailEmpty" style="color:#95a5a6;display:none;">该记录无步骤详情（可能已过期或被清理）</p>
+        </div>
+    </div>
+</div>
+
+<div id="modal-overlay" class="modal-overlay hide">
+    <div class="modal-dialog" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3>完整信息</h3>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-meta"></div>
+            <pre></pre>
         </div>
     </div>
 </div>
