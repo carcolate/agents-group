@@ -33,10 +33,11 @@
         <table class="table">
             <thead>
             <tr>
-                <th style="width:200px;">ID</th>
-                <th style="width:200px;">Agent</th>
-                <th>标题</th>
-                <th style="width:80px;">状态</th>
+                <th style="width:160px;">ID</th>
+                <th style="width:160px;">Agent</th>
+                <th style="width:220px;">标题</th>
+                <th>摘要（自动生成）</th>
+                <th style="width:70px;">状态</th>
                 <th style="width:160px;">操作</th>
             </tr>
             </thead>
@@ -79,8 +80,12 @@
             </div>
             <div class="form-row">
                 <label>文档内容 *（Markdown / 纯文本）</label>
-                <textarea id="f_content" rows="18" placeholder="文档全文，保存后会自动重新切片+向量化"></textarea>
+                <textarea id="f_content" rows="16" placeholder="文档全文，保存后会自动重新切片+向量化，并由 LLM 生成 100 字摘要"></textarea>
                 <p class="desc">拖入 .md / .txt 文件快速填充</p>
+            </div>
+            <div class="form-row">
+                <label>摘要（留空则保存时由 LLM 自动生成；100 字以内）</label>
+                <textarea id="f_summary" rows="3" placeholder="留空将自动生成。已有摘要时如需重新生成可清空后保存。"></textarea>
             </div>
         </div>
         <div class="modal-footer">

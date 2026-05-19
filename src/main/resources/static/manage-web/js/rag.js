@@ -41,20 +41,25 @@ function renderList(rows, total) {
     ragPage.total = total;
     const tbody = document.getElementById('tbody');
     if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#95a5a6;">暂无数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#95a5a6;">暂无数据</td></tr>';
     } else {
-        tbody.innerHTML = rows.map(r => `
+        tbody.innerHTML = rows.map(r => {
+            const sum = r.summary || '';
+            const sumShort = sum.length > 80 ? sum.slice(0, 80) + '…' : sum;
+            return `
             <tr>
                 <td><span class="mono">${escapeHtml(r.id)}</span></td>
                 <td>${escapeHtml(agentName(r.agentId))}</td>
                 <td>${escapeHtml(r.title)}</td>
+                <td title="${escapeHtml(sum)}">${escapeHtml(sumShort) || '<span style="color:#95a5a6;">（未生成）</span>'}</td>
                 <td>${statusTag(r.status)}</td>
                 <td class="ops">
                     <button onclick='openEditor(${JSON.stringify(r.id)})'>编辑</button>
                     <button class="danger" onclick='delRag(${JSON.stringify(r.id)})'>删除</button>
                 </td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
     }
     document.getElementById('total').textContent = total;
     const maxPage = Math.max(1, Math.ceil(total / ragPage.pageSize));
@@ -78,6 +83,7 @@ async function openEditor(id) {
     document.getElementById('f_id').value = '';
     document.getElementById('f_title').value = '';
     document.getElementById('f_content').value = '';
+    document.getElementById('f_summary').value = '';
     document.getElementById('f_status').value = '1';
     const filterAid = document.getElementById('filterAgent').value;
     if (filterAid) document.getElementById('f_agent_id').value = filterAid;
@@ -89,6 +95,7 @@ async function openEditor(id) {
         document.getElementById('f_agent_id').value = r.agentId;
         document.getElementById('f_title').value = r.title || '';
         document.getElementById('f_content').value = r.content || '';
+        document.getElementById('f_summary').value = r.summary || '';
         document.getElementById('f_status').value = r.status == null ? '1' : String(r.status);
     }
     showModal('editor');
@@ -102,12 +109,14 @@ async function submitForm() {
         agentId: document.getElementById('f_agent_id').value,
         title: document.getElementById('f_title').value.trim(),
         content: document.getElementById('f_content').value,
+        summary: document.getElementById('f_summary').value.trim() || null,
         status: Number(document.getElementById('f_status').value)
     };
     if (!body.agentId || !body.title || !body.content) {
         toast('Agent / 标题 / 内容均必填', true);
         return;
     }
+    toast('保存中，正在生成摘要，请稍候…');
     let rsp;
     if (id) {
         body.id = id;
@@ -115,7 +124,7 @@ async function submitForm() {
     } else {
         rsp = await API.post('/manage/rag/add', body);
     }
-    if (tip(rsp, (id ? '已更新' : '已新增') + '，向量库正在异步重建')) {
+    if (tip(rsp, (id ? '已更新' : '已新增') + '，摘要已生成，向量库正在异步重建')) {
         closeEditor();
         loadList();
     }
