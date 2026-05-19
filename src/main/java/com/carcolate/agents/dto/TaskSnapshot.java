@@ -32,4 +32,9 @@ public class TaskSnapshot {
     private Instant finishedAt;
 
     private List<StepRecord> steps = new ArrayList<>();
+
+    /**
+     * 最终发给 LLM 的 System Prompt 原文
+     */
+    private String systemPrompt;
 }

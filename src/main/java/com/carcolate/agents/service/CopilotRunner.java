@@ -78,8 +78,14 @@ public class CopilotRunner {
     }
 
     private void doRun(String uuid, Agent agent, CopilotRequest req, long startMs, int[] llmRoundRef) {
+        String systemPrompt = buildSystemPrompt(agent, req);
+        TaskSnapshot snap = load(uuid);
+        if (snap != null) {
+            snap.setSystemPrompt(systemPrompt);
+            save(snap);
+        }
         List<ChatMessage> messages = new ArrayList<>();
-        messages.add(SystemMessage.from(buildSystemPrompt(agent, req)));
+        messages.add(SystemMessage.from(systemPrompt));
         messages.add(UserMessage.from(req.getCurrentMessage()));
 
         // 按 Agent 配置动态构建 ChatModel，未设置时回退到全局默认（available-models 第一项）

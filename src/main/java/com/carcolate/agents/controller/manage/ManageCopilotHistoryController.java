@@ -25,9 +25,6 @@ public class ManageCopilotHistoryController {
 
     /**
      * 调用历史分页查询
-     * @param history  查询条件（agentId / status / userMessage 关键字 / uuid）
-     * @param pageNum  页码（从 1 开始）
-     * @param pageSize 每页数量
      */
     @GetMapping("list")
     public Object list(CopilotHistory history,
@@ -42,7 +39,6 @@ public class ManageCopilotHistoryController {
 
     /**
      * 详情：直接从 Redis 取 TaskSnapshot 返回完整 ReAct 轨迹
-     * Redis 已过期时返回错误
      */
     @GetMapping("detail")
     public Object detail(@RequestParam("uuid") String uuid) {
