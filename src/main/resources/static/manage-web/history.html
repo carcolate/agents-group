@@ -81,6 +81,30 @@
     </div>
 </div>
 
+<div id="detailModal" class="modal-overlay hide" onclick="closeDetail()">
+    <div class="modal-dialog modal-dialog-wide" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3>调用详情</h3>
+            <button class="modal-close" onclick="closeDetail()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p id="detailMeta"></p>
+            <div id="detailSysprompt" class="hide" style="margin-bottom:12px;">
+                <details>
+                    <summary style="cursor:pointer;font-weight:600;color:#34495e;">System Prompt（点击展开）</summary>
+                    <pre style="background:#f5f7fa;padding:10px;border-radius:4px;margin-top:6px;white-space:pre-wrap;word-break:break-word;font-size:13px;max-height:300px;overflow-y:auto;"></pre>
+                </details>
+            </div>
+            <div id="detailFinal" class="final-reply hide">
+                <h3>最终回复</h3>
+                <div id="detailFinalText" style="white-space:pre-wrap;word-break:break-word;"></div>
+            </div>
+            <div id="detailSteps" class="steps" style="max-height:50vh;overflow-y:auto;"></div>
+            <p id="detailEmpty" style="color:#95a5a6;display:none;">该记录无步骤详情（可能已过期或被清理）</p>
+        </div>
+    </div>
+</div>
+
 <script src="js/common.js"></script>
 <script src="js/history.js"></script>
 </body>

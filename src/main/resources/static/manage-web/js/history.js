@@ -129,6 +129,14 @@ async function openDetail(uuid) {
         + `结束: ${escapeHtml(formatTime(snap.finishedAt))}`
         + (snap.errorMsg ? ` · <span style="color:#e74c3c;">${escapeHtml(snap.errorMsg)}</span>` : '');
 
+    const syspromptEl = document.getElementById('detailSysprompt');
+    if (snap.systemPrompt) {
+        syspromptEl.classList.remove('hide');
+        syspromptEl.querySelector('pre').textContent = snap.systemPrompt;
+    } else {
+        syspromptEl.classList.add('hide');
+    }
+
     if (snap.finalReply) {
         document.getElementById('detailFinal').classList.remove('hide');
         document.getElementById('detailFinalText').textContent = snap.finalReply;
