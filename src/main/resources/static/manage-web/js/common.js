@@ -110,3 +110,11 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 });
+
+function renderThinkingBlock(thinking) {
+    if (!thinking) return '';
+    return `<details class="thinking-block">
+            <summary>\u{1F4AD} LLM \u601D\u8003\u8FC7\u7A0B\u{FF08}\u70B9\u51FB\u5C55\u5F00\u{FF09}</summary>
+            <pre>${escapeHtml(thinking)}</pre>
+        </details>`;
+}

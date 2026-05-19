@@ -360,6 +360,49 @@ button.block { width: 100%; padding: 10px 14px; }
 .step-TOOL_RESULT { border-left-color: #f1c40f; }
 .step-STYLE_REWRITE { border-left-color: #16a085; background: #eafaf5; }
 .step-FINAL_REPLY { border-left-color: #27ae60; background: #ecf9f1; }
+
+.thinking-flag {
+    display: inline-block;
+    padding: 1px 6px;
+    margin-left: 6px;
+    font-size: 11px;
+    color: #6c5ce7;
+    background: #efeaff;
+    border: 1px solid #d6c9ff;
+    border-radius: 3px;
+    font-weight: normal;
+}
+.thinking-block {
+    margin: 6px 0 8px;
+    padding: 6px 10px;
+    background: #f6f3ff;
+    border: 1px dashed #c8bff0;
+    border-radius: 4px;
+    font-size: 12px;
+}
+.thinking-block summary {
+    cursor: pointer;
+    color: #6c5ce7;
+    user-select: none;
+    outline: none;
+}
+.thinking-block summary::-webkit-details-marker {
+    color: #6c5ce7;
+}
+.thinking-block pre {
+    margin: 8px 0 2px;
+    padding: 8px 10px;
+    background: #fff;
+    border: 1px solid #e3dcfa;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+    color: #4a4a4a;
+    max-height: 360px;
+    overflow: auto;
+}
 .step-ERROR { border-left-color: #e74c3c; background: #fdecea; }
 
 .final-reply {

@@ -138,9 +138,10 @@ async function openDetail(uuid) {
     wrap.innerHTML = steps.map(s => `
         <div class="step step-${s.type}">
             <div class="head">
-                <span class="type">${escapeHtml(s.type)}${s.toolName ? ' · ' + escapeHtml(s.toolName) : ''}</span>
+                <span class="type">${escapeHtml(s.type)}${s.toolName ? ' · ' + escapeHtml(s.toolName) : ''}${s.thinking ? ' · <span class="thinking-flag">含思考链</span>' : ''}</span>
                 <span class="time">${escapeHtml(formatTime(s.time))}</span>
             </div>
+            ${renderThinkingBlock(s.thinking)}
             <div class="step-content">
                 <pre>${escapeHtml(s.content || '')}</pre>
                 ${s.toolArgs ? `<pre class="mono">args: ${escapeHtml(s.toolArgs)}</pre>` : ''}
