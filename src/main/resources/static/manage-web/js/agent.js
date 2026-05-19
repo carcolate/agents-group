@@ -168,7 +168,11 @@ async function delAgent(id) {
 }
 
 function initDragDrop() {
-    const ta = document.getElementById('f_pre_prompt');
+    ['f_pre_prompt', 'f_style_prompt'].forEach(id => bindDragDrop(id));
+}
+
+function bindDragDrop(id) {
+    const ta = document.getElementById(id);
     ta.addEventListener('dragover', e => {
         e.preventDefault();
         ta.style.borderColor = '#2364c8';
