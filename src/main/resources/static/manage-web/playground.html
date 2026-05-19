@@ -28,8 +28,9 @@
             <textarea id="p_summary" rows="4" placeholder="可选，例如：客户前几日咨询过价格，倾向 30 万左右..."></textarea>
         </div>
         <div class="form-row">
-            <label>近期历史消息（每行一条，可加角色前缀）</label>
-            <textarea id="p_history" rows="6" placeholder="客户: 你好&#10;客服: 您好，请问有什么可以帮您"></textarea>
+            <label>近期历史消息（每行一条，格式：角色|时间|内容）</label>
+            <textarea id="p_history" rows="6" placeholder="客户|2026-05-19 11:30:00|你好&#10;客服|2026-05-19 11:30:05|您好，请问有什么可以帮您"></textarea>
+            <p class="desc">格式：<code>角色|yyyy-MM-dd HH:mm:ss|内容</code>，时间和内容里的竖线请用别的字符替代。</p>
         </div>
         <div class="form-row">
             <label>客户当前消息</label>

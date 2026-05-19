@@ -18,9 +18,9 @@ public class CopilotRequest {
     private String currentMessage;
 
     /**
-     * 客户的历史消息（按时间正序排列，每条已含角色前缀更好，如 "客户: xxx" / "客服: xxx"）
+     * 客户的历史消息（按时间正序排列）。每条包含：角色、内容、时间（yyyy-MM-dd HH:mm:ss）
      */
-    private List<String> historyMessages;
+    private List<HistoryMessage> historyMessages;
 
     /**
      * 更早的历史消息总结

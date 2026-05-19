@@ -8,6 +8,7 @@ import com.carcolate.agents.domain.RagBase;
 import com.carcolate.agents.domain.enums.StepType;
 import com.carcolate.agents.domain.enums.TaskStatus;
 import com.carcolate.agents.dto.CopilotRequest;
+import com.carcolate.agents.dto.HistoryMessage;
 import com.carcolate.agents.dto.StepRecord;
 import com.carcolate.agents.dto.TaskSnapshot;
 import com.carcolate.agents.response.utils.RedisKeys;
@@ -29,7 +30,10 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -196,6 +200,26 @@ public class CopilotRunner {
         }
     }
 
+    private static final DateTimeFormatter HISTORY_TIME_FMT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final String[] CN_WEEK = {"周一", "周二", "周三", "周四", "周五", "周六", "周日"};
+
+    /**
+     * 把入参 yyyy-MM-dd HH:mm:ss 时间字符串格式化为 "yyyy-MM-dd HH:mm:ss 周X"。
+     * 入参为空 / 解析失败时回退原样输出（不挂主流程）。
+     */
+    private String formatTimeWithWeek(String raw) {
+        if (raw == null || raw.isBlank()) return "";
+        try {
+            LocalDateTime ldt = LocalDateTime.parse(raw.trim(), HISTORY_TIME_FMT);
+            DayOfWeek dow = ldt.getDayOfWeek();
+            String week = CN_WEEK[dow.getValue() - 1];
+            return ldt.format(HISTORY_TIME_FMT) + " " + week;
+        } catch (Exception e) {
+            return raw;
+        }
+    }
+
     /**
      * 安全读取 AiMessage 的思维链。reasoning 模型才有；普通模型返回 null。
      * 用反射兜底，防止个别老版本 LangChain4j 缺方法导致主流程崩溃。
@@ -232,8 +256,14 @@ public class CopilotRunner {
         }
         if (req.getHistoryMessages() != null && !req.getHistoryMessages().isEmpty()) {
             sb.append("\n\n## 近期对话\n");
-            for (String m : req.getHistoryMessages()) {
-                sb.append("- ").append(m).append("\n");
+            for (HistoryMessage m : req.getHistoryMessages()) {
+                if (m == null) continue;
+                String role = m.getRole() == null || m.getRole().isBlank() ? "未知角色" : m.getRole();
+                String content = m.getContent() == null ? "" : m.getContent();
+                String timeLabel = formatTimeWithWeek(m.getTime());
+                sb.append("- ");
+                if (!timeLabel.isEmpty()) sb.append("[").append(timeLabel).append("] ");
+                sb.append(role).append(": ").append(content).append("\n");
             }
         }
         sb.append("\n\n## 工具调用规则\n");

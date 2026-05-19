@@ -22,7 +22,7 @@ async function sendChat() {
     }
     const summary = document.getElementById('p_summary').value.trim();
     const historyText = document.getElementById('p_history').value;
-    const historyMessages = historyText.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+    const historyMessages = parseHistoryMessages(historyText);
 
     document.getElementById('steps').innerHTML = '';
     document.getElementById('final').classList.add('hide');
@@ -94,4 +94,42 @@ function renderSteps(snap) {
         document.getElementById('final').classList.remove('hide');
         document.getElementById('final_text').textContent = snap.finalReply;
     }
+}
+
+/**
+ * 把 textarea 文本按 "角色|时间|内容" 解析为 HistoryMessage 数组。
+ * 宽松处理：
+ *   - 一段（无竖线）→ role=未知，content=原文，time 留空
+ *   - 两段           → role | content（time 留空）
+ *   - 三段及以上     → role | time | content（第三段后允许内容里再带 "|"）
+ */
+function parseHistoryMessages(text) {
+    if (!text) return [];
+    return text.split('\n')
+        .map(s => s.trim())
+        .filter(s => s.length > 0)
+        .map(line => {
+            const parts = line.split('|');
+            if (parts.length === 1) {
+                return { role: '未知', content: parts[0].trim(), time: '' };
+            }
+            if (parts.length === 2) {
+                return { role: parts[0].trim(), content: parts[1].trim(), time: '' };
+            }
+            return {
+                role: parts[0].trim(),
+                time: parts[1].trim(),
+                content: parts.slice(2).join('|').trim()
+            };
+        });
+}
+
+function renderThinkingBlock(thinking) {
+    if (!thinking) return '';
+    return `
+        <details class="thinking-block">
+            <summary>💭 LLM 思考过程（点击展开）</summary>
+            <pre>${escapeHtml(thinking)}</pre>
+        </details>
+    `;
 }

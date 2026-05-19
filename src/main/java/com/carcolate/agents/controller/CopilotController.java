@@ -57,8 +57,8 @@ public class CopilotController {
      *   "agentId": 1,
      *   "currentMessage": "极石汽车多少钱？",
      *   "historyMessages": [
-     *     "客户: 你好",
-     *     "客服: 您好，请问有什么可以帮您"
+     *     { "role": "客户", "content": "你好",                 "time": "2026-05-19 11:30:00" },
+     *     { "role": "客服", "content": "您好，请问有什么可以帮您", "time": "2026-05-19 11:30:05" }
      *   ],
      *   "historySummary": "客户前几日咨询过价格，倾向 30 万左右"
      * }
