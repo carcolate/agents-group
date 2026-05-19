@@ -43,6 +43,13 @@ public class LangChainConfig {
     private boolean logResponses;
 
     /**
+     * 是否请求模型返回思维链（reasoning_content / thinking）。
+     * 仅 reasoning 系列模型（DeepSeek-R1、Doubao thinking 系列等）会真的返回；普通模型设置为 true 也无副作用。
+     */
+    @Value("${copilot.llm.return-thinking:true}")
+    private boolean returnThinking;
+
+    /**
      * 返回配置中的可用模型名列表（不可变）。第一项即默认模型。
      */
     public List<String> getAvailableModels() {
@@ -77,6 +84,7 @@ public class LangChainConfig {
                 .timeout(Duration.ofSeconds(timeoutSeconds))
                 .logRequests(logRequests)
                 .logResponses(logResponses)
+                .returnThinking(returnThinking)
                 .build();
     }
 

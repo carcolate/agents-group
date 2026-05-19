@@ -28,6 +28,11 @@ public class StepRecord {
     private String toolArgs;
 
     /**
+     * LLM 思维链（reasoning_content / thinking），仅 LLM_THINK / STYLE_REWRITE 可能有
+     */
+    private String thinking;
+
+    /**
      * 时间戳
      */
     private Instant time;
@@ -36,6 +41,15 @@ public class StepRecord {
         StepRecord s = new StepRecord();
         s.type = type;
         s.content = content;
+        s.time = Instant.now();
+        return s;
+    }
+
+    public static StepRecord ofThink(String type, String content, String thinking) {
+        StepRecord s = new StepRecord();
+        s.type = type;
+        s.content = content;
+        s.thinking = (thinking == null || thinking.isBlank()) ? null : thinking;
         s.time = Instant.now();
         return s;
     }

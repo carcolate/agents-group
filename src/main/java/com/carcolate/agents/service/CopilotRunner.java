@@ -103,7 +103,8 @@ public class CopilotRunner {
             String thinkContent = hasToolCall
                     ? thinkText + "\n[计划调用工具: " + JSON.toJSONString(ai.toolExecutionRequests()) + "]"
                     : thinkText;
-            appendStep(uuid, StepRecord.of(StepType.LLM_THINK.getCode(), thinkContent));
+            String reasoning = safeThinking(ai);
+            appendStep(uuid, StepRecord.ofThink(StepType.LLM_THINK.getCode(), thinkContent, reasoning));
 
             if (!hasToolCall) {
                 String finalReply = applyStylePolish(uuid, chatModel, agent, thinkText);
@@ -163,21 +164,37 @@ public class CopilotRunner {
 
             ChatRequest req = ChatRequest.builder().messages(msgs).build();
             ChatResponse resp = chatModel.chat(req);
-            String polished = resp.aiMessage() == null ? null : resp.aiMessage().text();
+            AiMessage polishAi = resp.aiMessage();
+            String polished = polishAi == null ? null : polishAi.text();
+            String polishThinking = safeThinking(polishAi);
             if (polished == null || polished.isBlank()) {
-                appendStep(uuid, StepRecord.of(StepType.STYLE_REWRITE.getCode(),
-                        "风格润色返回为空，回退草稿。草稿=" + draftReply));
+                appendStep(uuid, StepRecord.ofThink(StepType.STYLE_REWRITE.getCode(),
+                        "风格润色返回为空，回退草稿。草稿=" + draftReply, polishThinking));
                 return draftReply;
             }
             polished = polished.trim();
-            appendStep(uuid, StepRecord.of(StepType.STYLE_REWRITE.getCode(),
-                    "草稿：" + draftReply + "\n----\n润色后：" + polished));
+            appendStep(uuid, StepRecord.ofThink(StepType.STYLE_REWRITE.getCode(),
+                    "草稿：" + draftReply + "\n----\n润色后：" + polished, polishThinking));
             return polished;
         } catch (Exception e) {
             log.warn("[Copilot] uuid={} 风格润色失败，回退草稿", uuid, e);
             appendStep(uuid, StepRecord.of(StepType.STYLE_REWRITE.getCode(),
                     "风格润色异常，回退草稿：" + e.getMessage()));
             return draftReply;
+        }
+    }
+
+    /**
+     * 安全读取 AiMessage 的思维链。reasoning 模型才有；普通模型返回 null。
+     * 用反射兜底，防止个别老版本 LangChain4j 缺方法导致主流程崩溃。
+     */
+    private String safeThinking(AiMessage ai) {
+        if (ai == null) return null;
+        try {
+            String t = ai.thinking();
+            return (t == null || t.isBlank()) ? null : t;
+        } catch (Throwable ignore) {
+            return null;
         }
     }
 
