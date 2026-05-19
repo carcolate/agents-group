@@ -78,7 +78,10 @@
             <p id="detailMeta"></p>
             <div id="detailSysprompt" class="hide" style="margin-bottom:12px;">
                 <details>
-                    <summary style="cursor:pointer;font-weight:600;color:#34495e;">System Prompt（点击展开）</summary>
+                    <summary style="cursor:pointer;font-weight:600;color:#34495e;display:flex;align-items:center;gap:8px;">
+                        System Prompt（点击展开）
+                        <button onclick="copySysprompt(event)" style="font-size:12px;padding:2px 8px;cursor:pointer;">复制</button>
+                    </summary>
                     <pre style="background:#f5f7fa;padding:10px;border-radius:4px;margin-top:6px;white-space:pre-wrap;word-break:break-word;font-size:13px;max-height:300px;overflow-y:auto;"></pre>
                 </details>
             </div>

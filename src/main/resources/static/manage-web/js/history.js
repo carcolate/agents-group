@@ -165,3 +165,15 @@ async function openDetail(uuid) {
 }
 
 function closeDetail() { hideModal('detailModal'); }
+
+function copySysprompt(event) {
+    event.stopPropagation();
+    event.preventDefault();
+    const pre = document.querySelector('#detailSysprompt pre');
+    if (!pre) return;
+    navigator.clipboard.writeText(pre.textContent).then(() => {
+        const btn = event.target;
+        btn.textContent = '已复制';
+        setTimeout(() => btn.textContent = '复制', 1500);
+    });
+}
