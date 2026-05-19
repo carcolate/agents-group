@@ -26,7 +26,7 @@ Content-Type: application/json
 |------|------|------|------|
 | `agentId` | `Long` | 是 | Agent ID |
 | `currentMessage` | `String` | 是 | 客户当前发送的消息 |
-| `historyMessages` | `List<String>` | 否 | 历史消息（按时间正序，建议含角色前缀，如 `"客户: xxx"` / `"客服: xxx"`） |
+| `historyMessages` | `List<HistoryMessage>` | 否 | 历史消息（按时间正序，每条包含角色、内容、时间） |
 | `historySummary` | `String` | 否 | 更早历史消息的总结 |
 
 #### 请求示例
@@ -36,8 +36,8 @@ Content-Type: application/json
   "agentId": 1,
   "currentMessage": "极石汽车多少钱？",
   "historyMessages": [
-    "客户: 你好",
-    "客服: 您好，请问有什么可以帮您"
+    { "role": "客户", "content": "你好", "time": "2026-05-19 11:30:00" },
+    { "role": "客服", "content": "您好，请问有什么可以帮您", "time": "2026-05-19 11:30:05" }
   ],
   "historySummary": "客户前几日咨询过价格，倾向 30 万左右"
 }
@@ -165,6 +165,14 @@ GET /copilot/chat/result?uuid={uuid}
 | `createdAt` | `Instant` | 任务创建时间 (ISO-8601) |
 | `finishedAt` | `Instant` | 任务完成时间 (ISO-8601，未完成时为 `null`) |
 | `steps` | `List<StepRecord>` | 决策步骤列表（按时间正序） |
+
+### 历史消息 (HistoryMessage)
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `role` | `String` | 角色，例如：客户 / 客服 / system |
+| `content` | `String` | 消息正文 |
+| `time` | `String` | 消息时间，格式：`yyyy-MM-dd HH:mm:ss` |
 
 ### 步骤记录 (StepRecord)
 
