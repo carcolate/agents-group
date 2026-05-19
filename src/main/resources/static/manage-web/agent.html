@@ -68,10 +68,14 @@
                 <label>前置 Prompt *</label>
                 <textarea id="f_pre_prompt" rows="14" placeholder="# 角色 ...\n# 操作步骤 ...\n# 注意事项 ..."></textarea>
             </div>
+            <div class="form-row">
+                <label>语言风格 Prompt</label>
+                <textarea id="f_style_prompt" rows="6" placeholder="语气风格要求，例如：使用亲切友好的语气回复，像朋友一样交流。&#10;最终回复时会用此 Prompt 对 AI 的回答做风格润色，不影响 Agent 的决策过程。"></textarea>
+            </div>
             <div class="form-row two">
                 <div>
-                    <label>模型名（留空走全局）</label>
-                    <input id="f_model_name" placeholder="例如：deepseek-chat" />
+                    <label>模型名（留空走默认）</label>
+                    <select id="f_model_name"></select>
                 </div>
                 <div>
                     <label>温度（0~1，留空走全局）</label>

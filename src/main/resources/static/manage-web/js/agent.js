@@ -86,6 +86,7 @@ async function openEditor(id) {
     document.getElementById('f_name').value = '';
     document.getElementById('f_mission').value = '';
     document.getElementById('f_pre_prompt').value = '';
+    document.getElementById('f_style_prompt').value = '';
     renderModelSelect();
     document.getElementById('f_model_name').value = '';
     document.getElementById('f_temperature').value = '';
@@ -100,6 +101,8 @@ async function openEditor(id) {
         document.getElementById('f_name').value = a.name || '';
         document.getElementById('f_mission').value = a.mission || '';
         document.getElementById('f_pre_prompt').value = a.prePrompt || '';
+        document.getElementById('f_style_prompt').value = a.stylePrompt || '';
+        document.getElementById('f_style_prompt').value = a.stylePrompt || '';
         setModelSelectValue(a.modelName);
         document.getElementById('f_temperature').value = a.temperature == null ? '' : a.temperature;
         document.getElementById('f_max_steps').value = a.maxSteps || 6;
@@ -134,6 +137,7 @@ async function submitForm() {
         name: document.getElementById('f_name').value.trim(),
         mission: document.getElementById('f_mission').value.trim(),
         prePrompt: document.getElementById('f_pre_prompt').value,
+        stylePrompt: document.getElementById('f_style_prompt').value || null,
         modelName: (document.getElementById('f_model_name').value || '').trim() || null,
         temperature: document.getElementById('f_temperature').value === '' ? null : Number(document.getElementById('f_temperature').value),
         maxSteps: Number(document.getElementById('f_max_steps').value) || 6,
