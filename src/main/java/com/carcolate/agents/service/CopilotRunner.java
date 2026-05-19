@@ -1,8 +1,10 @@
 package com.carcolate.agents.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.carcolate.agents.config.LangChainConfig;
 import com.carcolate.agents.domain.Agent;
+import com.carcolate.agents.domain.RagBase;
 import com.carcolate.agents.domain.enums.StepType;
 import com.carcolate.agents.domain.enums.TaskStatus;
 import com.carcolate.agents.dto.CopilotRequest;
@@ -46,6 +48,9 @@ public class CopilotRunner {
 
     @Autowired
     private RagSearchTool ragSearchTool;
+
+    @Autowired
+    private RagBaseService ragBaseService;
 
     @Autowired
     private CopilotHistoryService copilotHistoryService;
@@ -180,6 +185,13 @@ public class CopilotRunner {
         StringBuilder sb = new StringBuilder();
         sb.append(agent.getPrePrompt() == null ? "" : agent.getPrePrompt());
         sb.append("\n\n## Agent 身份与使命\n").append(agent.getMission() == null ? "" : agent.getMission());
+
+        // 知识库目录：让 LLM 在决策是否调用 search_knowledge_base 之前知道有哪些资料
+        String catalog = buildKnowledgeCatalog(agent.getId());
+        if (catalog != null && !catalog.isEmpty()) {
+            sb.append("\n\n## 可用知识库目录\n").append(catalog);
+        }
+
         if (req.getHistorySummary() != null && !req.getHistorySummary().isBlank()) {
             sb.append("\n\n## 更早历史消息总结\n").append(req.getHistorySummary());
         }
@@ -190,9 +202,40 @@ public class CopilotRunner {
             }
         }
         sb.append("\n\n## 工具调用规则\n");
-        sb.append("- 当需要产品资料、销售技巧、政策细节等具体知识时，必须调用 search_knowledge_base 工具检索，禁止凭空捏造。\n");
+        sb.append("- 上方【可用知识库目录】列出了当前 Agent 能检索到的全部文档及其摘要。\n");
+        sb.append("- 当用户问题与某条目录摘要相关时，必须调用 search_knowledge_base 工具按需检索具体片段，禁止凭空捏造。\n");
+        sb.append("- 当目录中没有任何与用户问题相关的条目，或问题属于寒暄/澄清/不需要资料支撑的范畴时，无需调用工具，直接给出最终回复。\n");
         sb.append("- 不需要调用工具时，直接给出最终回复（输出客户实际看到的那句话即可，不要再附思考过程）。\n");
         return sb.toString();
+    }
+
+    /**
+     * 拉取该 Agent 下启用状态的知识库标题 + 摘要，作为目录提供给 LLM。
+     * 拉不到时返回 null，buildSystemPrompt 自动忽略。
+     */
+    private String buildKnowledgeCatalog(Long agentId) {
+        if (agentId == null) return null;
+        try {
+            LambdaQueryWrapper<RagBase> qw = new LambdaQueryWrapper<>();
+            qw.eq(RagBase::getAgentId, agentId);
+            qw.eq(RagBase::getStatus, 1);
+            qw.select(RagBase::getId, RagBase::getTitle, RagBase::getSummary);
+            List<RagBase> docs = ragBaseService.list(qw);
+            if (docs == null || docs.isEmpty()) {
+                return "（当前 Agent 暂无知识库文档）";
+            }
+            StringBuilder sb = new StringBuilder();
+            for (RagBase d : docs) {
+                String title = d.getTitle() == null ? "(无标题)" : d.getTitle();
+                String summary = d.getSummary() == null || d.getSummary().isBlank()
+                        ? "(暂无摘要)" : d.getSummary();
+                sb.append("- 《").append(title).append("》：").append(summary).append("\n");
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            log.warn("[Copilot] 构建知识库目录失败 agentId={}", agentId, e);
+            return null;
+        }
     }
 
     private TaskSnapshot load(String uuid) {

@@ -33,6 +33,7 @@ CREATE TABLE `tb_rag_base` (
   `agent_id` BIGINT NOT NULL COMMENT '所属 Agent ID（tb_agent.id）',
   `title` VARCHAR(255) NOT NULL COMMENT '文档标题',
   `content` LONGTEXT NOT NULL COMMENT '文档内容（Markdown/纯文本）',
+  `summary` VARCHAR(1024) NULL COMMENT 'LLM 自动生成的文档摘要（100 字以内，用于 Agent 决策时的知识库目录）',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1启用 0禁用',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

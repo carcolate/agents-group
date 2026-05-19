@@ -35,6 +35,11 @@ public class RagBase implements Serializable {
     private String content;
 
     /**
+     * LLM 自动生成的文档摘要（100 字以内），供 Agent 决策时作为知识库目录使用
+     */
+    private String summary;
+
+    /**
      * 状态：1启用 0禁用
      */
     private Integer status;

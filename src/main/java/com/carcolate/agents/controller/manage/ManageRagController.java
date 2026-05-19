@@ -6,6 +6,7 @@ import com.carcolate.agents.mapper.RagBaseMapper;
 import com.carcolate.agents.response.CodeMsg;
 import com.carcolate.agents.response.Rsp;
 import com.carcolate.agents.service.RagBaseService;
+import com.carcolate.agents.service.RagSummaryService;
 import com.carcolate.agents.service.RagVectorService;
 import com.github.yitter.idgen.YitIdHelper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +31,9 @@ public class ManageRagController {
 
     @Autowired
     private RagVectorService ragVectorService;
+
+    @Autowired
+    private RagSummaryService ragSummaryService;
 
     @GetMapping("list")
     public Object list(RagBase ragBase,
@@ -58,6 +62,10 @@ public class ManageRagController {
         }
         ragBase.setId(YitIdHelper.nextId());
         if (ragBase.getStatus() == null) ragBase.setStatus(1);
+        // 用户传入 summary 时尊重之；为空则调 LLM 现场生成
+        if (ragBase.getSummary() == null || ragBase.getSummary().isBlank()) {
+            ragBase.setSummary(ragSummaryService.summarize(ragBase.getTitle(), ragBase.getContent()));
+        }
         ragBase.setCreatedAt(Instant.now());
         ragBase.setUpdatedAt(Instant.now());
         boolean ok = ragBaseService.save(ragBase);
@@ -76,6 +84,19 @@ public class ManageRagController {
         RagBase old = ragBaseService.getById(ragBase.getId());
         if (old == null) {
             return Rsp.error(CodeMsg.DATA_NULL);
+        }
+        // content 变化时强制重算摘要；其余情况若入参 summary 为空也尝试补一份
+        boolean contentChanged = ragBase.getContent() != null
+                && !ragBase.getContent().equals(old.getContent());
+        boolean needRegen = contentChanged
+                || ragBase.getSummary() == null || ragBase.getSummary().isBlank();
+        if (needRegen) {
+            String title = ragBase.getTitle() == null ? old.getTitle() : ragBase.getTitle();
+            String content = ragBase.getContent() == null ? old.getContent() : ragBase.getContent();
+            String summary = ragSummaryService.summarize(title, content);
+            if (summary != null) {
+                ragBase.setSummary(summary);
+            }
         }
         ragBase.setUpdatedAt(Instant.now());
         boolean ok = ragBaseService.updateById(ragBase);
