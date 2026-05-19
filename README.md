@@ -1,5 +1,7 @@
 # AgentGroup — Copilot Agent 管理平台
 
+[English](README_EN.md)
+
 基于 Spring Boot 4 + MyBatis-Plus 的智能客服 Agent 管理后台，提供 Agent 管理、RAG 知识库与 ReAct 对话引擎。
 
 ---
