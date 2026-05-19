@@ -12,6 +12,7 @@ CREATE TABLE `tb_agent` (
   `name` VARCHAR(64) NOT NULL COMMENT 'Agent 名称，如：极石汽车销售专家',
   `mission` VARCHAR(512) NOT NULL DEFAULT '' COMMENT '身份与使命，一句话定位',
   `pre_prompt` MEDIUMTEXT NOT NULL COMMENT '前置 System Prompt：任务目标/操作步骤/语气/注意事项 等完整提示词',
+  `style_prompt` MEDIUMTEXT NULL COMMENT '语言风格 Prompt：主 Agent 不感知，仅在生成最终回复后用于润色风格',
   `model_name` VARCHAR(64) DEFAULT NULL COMMENT '可选：覆盖全局模型名',
   `temperature` DECIMAL(3,2) DEFAULT NULL COMMENT '可选：覆盖全局温度',
   `max_steps` INT NOT NULL DEFAULT 6 COMMENT 'Agent 单次最多决策轮数，防死循环',

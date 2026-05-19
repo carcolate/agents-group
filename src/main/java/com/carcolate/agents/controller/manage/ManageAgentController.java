@@ -1,6 +1,7 @@
 package com.carcolate.agents.controller.manage;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.carcolate.agents.config.LangChainConfig;
 import com.carcolate.agents.domain.Agent;
 import com.carcolate.agents.mapper.AgentMapper;
 import com.carcolate.agents.response.CodeMsg;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.util.List;
 
 @RestController
 @RequestMapping("manage/agent")
@@ -26,6 +28,18 @@ public class ManageAgentController {
 
     @Autowired
     private AgentMapper agentMapper;
+
+    @Autowired
+    private LangChainConfig langChainConfig;
+
+    /**
+     * 返回配置文件中可用的模型名列表，第一项即为默认模型
+     */
+    @GetMapping("availableModels")
+    public Object availableModels() {
+        List<String> models = langChainConfig.getAvailableModels();
+        return Rsp.success(models);
+    }
 
     @GetMapping("list")
     public Object list(Agent agent,

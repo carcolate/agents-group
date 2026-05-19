@@ -12,6 +12,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
+import java.util.Collections;
+import java.util.List;
 
 @Configuration
 public class LangChainConfig {
@@ -22,8 +24,11 @@ public class LangChainConfig {
     @Value("${copilot.llm.api-key}")
     private String apiKey;
 
-    @Value("${copilot.llm.model-name}")
-    private String modelName;
+    /**
+     * 可用模型列表，逗号分隔。第一项作为默认模型。
+     */
+    @Value("${copilot.llm.available-models}")
+    private List<String> availableModels;
 
     @Value("${copilot.llm.temperature:0.3}")
     private Double temperature;
@@ -37,17 +42,50 @@ public class LangChainConfig {
     @Value("${copilot.llm.log-responses:false}")
     private boolean logResponses;
 
-    @Bean
-    public ChatModel chatModel() {
+    /**
+     * 返回配置中的可用模型名列表（不可变）。第一项即默认模型。
+     */
+    public List<String> getAvailableModels() {
+        if (availableModels == null || availableModels.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return Collections.unmodifiableList(availableModels);
+    }
+
+    /**
+     * 默认模型名 = 可用模型列表的第一项。
+     */
+    public String getDefaultModelName() {
+        if (availableModels == null || availableModels.isEmpty()) {
+            throw new IllegalStateException("copilot.llm.available-models 未配置");
+        }
+        return availableModels.get(0);
+    }
+
+    /**
+     * 根据 Agent 偏好动态构建 ChatModel。
+     * 传入参数为空时回退到全局默认（模型名取列表第一项，温度取 copilot.llm.temperature）。
+     */
+    public ChatModel buildChatModel(String modelName, Double temperatureOverride) {
+        String finalModel = (modelName == null || modelName.isBlank()) ? getDefaultModelName() : modelName;
+        Double finalTemp = temperatureOverride == null ? this.temperature : temperatureOverride;
         return OpenAiChatModel.builder()
                 .baseUrl(baseUrl)
                 .apiKey(apiKey)
-                .modelName(modelName)
-                .temperature(temperature)
+                .modelName(finalModel)
+                .temperature(finalTemp)
                 .timeout(Duration.ofSeconds(timeoutSeconds))
                 .logRequests(logRequests)
                 .logResponses(logResponses)
                 .build();
+    }
+
+    /**
+     * 默认 ChatModel Bean，使用列表第一项 + 全局温度。
+     */
+    @Bean
+    public ChatModel chatModel() {
+        return buildChatModel(null, null);
     }
 
     @Bean

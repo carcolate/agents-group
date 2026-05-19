@@ -36,6 +36,12 @@ public class Agent implements Serializable {
     private String prePrompt;
 
     /**
+     * 语言风格 Prompt：主 Agent 决策时不感知，
+     * 仅在生成最终回复后用于风格润色，输出终稿
+     */
+    private String stylePrompt;
+
+    /**
      * 可选：覆盖全局模型名
      */
     private String modelName;

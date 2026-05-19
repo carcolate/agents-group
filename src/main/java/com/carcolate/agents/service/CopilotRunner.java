@@ -1,6 +1,7 @@
 package com.carcolate.agents.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.carcolate.agents.config.LangChainConfig;
 import com.carcolate.agents.domain.Agent;
 import com.carcolate.agents.domain.enums.StepType;
 import com.carcolate.agents.domain.enums.TaskStatus;
@@ -41,7 +42,7 @@ public class CopilotRunner {
     private RedisTemplate<String, Object> redisTemplate;
 
     @Autowired
-    private ChatModel chatModel;
+    private LangChainConfig langChainConfig;
 
     @Autowired
     private RagSearchTool ragSearchTool;
@@ -70,6 +71,10 @@ public class CopilotRunner {
         messages.add(SystemMessage.from(buildSystemPrompt(agent, req)));
         messages.add(UserMessage.from(req.getCurrentMessage()));
 
+        // 按 Agent 配置动态构建 ChatModel，未设置时回退到全局默认（available-models 第一项）
+        Double agentTemp = agent.getTemperature() == null ? null : agent.getTemperature().doubleValue();
+        ChatModel chatModel = langChainConfig.buildChatModel(agent.getModelName(), agentTemp);
+
         int maxSteps = agent.getMaxSteps() == null || agent.getMaxSteps() <= 0 ? 6 : agent.getMaxSteps();
         for (int i = 0; i < maxSteps; i++) {
             ChatRequest chatRequest = ChatRequest.builder()
@@ -89,8 +94,9 @@ public class CopilotRunner {
             appendStep(uuid, StepRecord.of(StepType.LLM_THINK.getCode(), thinkContent));
 
             if (!hasToolCall) {
-                appendStep(uuid, StepRecord.of(StepType.FINAL_REPLY.getCode(), thinkText));
-                markDone(uuid, thinkText);
+                String finalReply = applyStylePolish(uuid, chatModel, agent, thinkText);
+                appendStep(uuid, StepRecord.of(StepType.FINAL_REPLY.getCode(), finalReply));
+                markDone(uuid, finalReply);
                 return;
             }
 
@@ -117,6 +123,49 @@ public class CopilotRunner {
             }
         }
         markFailed(uuid, "超过最大决策轮数(" + maxSteps + ")，未产出最终回复");
+    }
+
+    /**
+     * 用 agent.stylePrompt 对主 Agent 产出的草稿做风格润色，生成终稿。
+     * - stylePrompt 为空：直接返回草稿，不调用 LLM。
+     * - 润色调用失败：记录错误步骤，回退草稿，保证主流程可用。
+     */
+    private String applyStylePolish(String uuid, ChatModel chatModel, Agent agent, String draftReply) {
+        String stylePrompt = agent.getStylePrompt();
+        if (stylePrompt == null || stylePrompt.isBlank()) {
+            return draftReply;
+        }
+        if (draftReply == null || draftReply.isBlank()) {
+            return draftReply;
+        }
+        try {
+            String sys = "你是文本风格改写助手。严格按照下方【风格要求】对【原始回复】做语气、措辞、长度的润色，"
+                    + "禁止增删事实信息、禁止编造数据、禁止改变核心结论。只输出改写后的终稿正文，不要任何解释、前后缀、引号或代码块。\n\n"
+                    + "【风格要求】\n" + stylePrompt;
+            String usr = "【原始回复】\n" + draftReply;
+
+            List<ChatMessage> msgs = new ArrayList<>();
+            msgs.add(SystemMessage.from(sys));
+            msgs.add(UserMessage.from(usr));
+
+            ChatRequest req = ChatRequest.builder().messages(msgs).build();
+            ChatResponse resp = chatModel.chat(req);
+            String polished = resp.aiMessage() == null ? null : resp.aiMessage().text();
+            if (polished == null || polished.isBlank()) {
+                appendStep(uuid, StepRecord.of(StepType.STYLE_REWRITE.getCode(),
+                        "风格润色返回为空，回退草稿。草稿=" + draftReply));
+                return draftReply;
+            }
+            polished = polished.trim();
+            appendStep(uuid, StepRecord.of(StepType.STYLE_REWRITE.getCode(),
+                    "草稿：" + draftReply + "\n----\n润色后：" + polished));
+            return polished;
+        } catch (Exception e) {
+            log.warn("[Copilot] uuid={} 风格润色失败，回退草稿", uuid, e);
+            appendStep(uuid, StepRecord.of(StepType.STYLE_REWRITE.getCode(),
+                    "风格润色异常，回退草稿：" + e.getMessage()));
+            return draftReply;
+        }
     }
 
     private String buildSystemPrompt(Agent agent, CopilotRequest req) {
