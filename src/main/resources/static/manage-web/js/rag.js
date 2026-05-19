@@ -37,21 +37,31 @@ function agentName(id) {
     return a ? a.name : ('#' + id);
 }
 
+function engageTag(t) {
+    if (t === 2) return '<span class="tag tag-prepend">前置注入</span>';
+    return '<span class="tag tag-rag">AI 自检索</span>';
+}
+
 function renderList(rows, total) {
     ragPage.total = total;
     const tbody = document.getElementById('tbody');
     if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#95a5a6;">暂无数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#95a5a6;">暂无数据</td></tr>';
     } else {
         tbody.innerHTML = rows.map(r => {
             const sum = r.summary || '';
             const sumShort = sum.length > 80 ? sum.slice(0, 80) + '…' : sum;
+            const et = r.engageType == null ? 1 : Number(r.engageType);
+            const sumCell = et === 2
+                ? '<span style="color:#95a5a6;">（前置注入，无需摘要）</span>'
+                : (escapeHtml(sumShort) || '<span style="color:#95a5a6;">（未生成）</span>');
             return `
             <tr>
                 <td><span class="mono">${escapeHtml(r.id)}</span></td>
                 <td>${escapeHtml(agentName(r.agentId))}</td>
                 <td>${escapeHtml(r.title)}</td>
-                <td title="${escapeHtml(sum)}">${escapeHtml(sumShort) || '<span style="color:#95a5a6;">（未生成）</span>'}</td>
+                <td>${engageTag(et)}</td>
+                <td title="${escapeHtml(sum)}">${sumCell}</td>
                 <td>${statusTag(r.status)}</td>
                 <td class="ops">
                     <button onclick='openEditor(${JSON.stringify(r.id)})'>编辑</button>
@@ -85,6 +95,7 @@ async function openEditor(id) {
     document.getElementById('f_content').value = '';
     document.getElementById('f_summary').value = '';
     document.getElementById('f_status').value = '1';
+    document.getElementById('f_engage_type').value = '1';
     const filterAid = document.getElementById('filterAgent').value;
     if (filterAid) document.getElementById('f_agent_id').value = filterAid;
     if (id) {
@@ -97,26 +108,45 @@ async function openEditor(id) {
         document.getElementById('f_content').value = r.content || '';
         document.getElementById('f_summary').value = r.summary || '';
         document.getElementById('f_status').value = r.status == null ? '1' : String(r.status);
+        document.getElementById('f_engage_type').value = r.engageType == null ? '1' : String(r.engageType);
     }
+    onEngageTypeChange();
     showModal('editor');
+}
+
+function onEngageTypeChange() {
+    const t = document.getElementById('f_engage_type').value;
+    const desc = document.getElementById('engage_desc');
+    const sumRow = document.getElementById('f_summary').closest('.form-row');
+    if (t === '2') {
+        desc.textContent = '前置：不切片不向量化，每次对话会把全文自动拼到 systemPrompt 给 LLM。适合规则手册、价格表、政策强约束等必须每次都看到的内容。';
+        if (sumRow) sumRow.style.display = 'none';
+    } else {
+        desc.textContent = '默认：保存时自动切片向量化，由 LLM 通过工具按需检索。';
+        if (sumRow) sumRow.style.display = '';
+    }
 }
 
 function closeEditor() { hideModal('editor'); }
 
 async function submitForm() {
     const id = document.getElementById('f_id').value;
+    const engageType = Number(document.getElementById('f_engage_type').value) || 1;
     const body = {
         agentId: document.getElementById('f_agent_id').value,
         title: document.getElementById('f_title').value.trim(),
         content: document.getElementById('f_content').value,
-        summary: document.getElementById('f_summary').value.trim() || null,
+        summary: engageType === 2 ? null : (document.getElementById('f_summary').value.trim() || null),
+        engageType: engageType,
         status: Number(document.getElementById('f_status').value)
     };
     if (!body.agentId || !body.title || !body.content) {
         toast('Agent / 标题 / 内容均必填', true);
         return;
     }
-    document.getElementById('loadingText').textContent = '保存中，正在生成摘要，请稍候…';
+    document.getElementById('loadingText').textContent = engageType === 2
+        ? '保存中，正在重建向量库…'
+        : '保存中，正在生成摘要，请稍候…';
     document.getElementById('loadingOverlay').classList.remove('hide');
     let rsp;
     if (id) {
@@ -126,7 +156,10 @@ async function submitForm() {
         rsp = await API.post('/manage/rag/add', body);
     }
     document.getElementById('loadingOverlay').classList.add('hide');
-    if (tip(rsp, (id ? '已更新' : '已新增') + '，摘要已生成，向量库正在异步重建')) {
+    const okMsg = engageType === 2
+        ? ((id ? '已更新' : '已新增') + '（前置知识库，已纳入 systemPrompt）')
+        : ((id ? '已更新' : '已新增') + '，摘要已生成，向量库正在异步重建');
+    if (tip(rsp, okMsg)) {
         closeEditor();
         loadList();
     }

@@ -367,6 +367,17 @@ button.block { width: 100%; padding: 10px 14px; }
 .step-STYLE_REWRITE { border-left-color: #16a085; background: #eafaf5; }
 .step-FINAL_REPLY { border-left-color: #27ae60; background: #ecf9f1; }
 
+.tag-rag {
+    background: #eef4ff;
+    color: #2364c8;
+    border: 1px solid #c6daff;
+}
+.tag-prepend {
+    background: #fff5e6;
+    color: #c97a14;
+    border: 1px solid #ffd9a3;
+}
+
 .thinking-flag {
     display: inline-block;
     padding: 1px 6px;

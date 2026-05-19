@@ -209,10 +209,16 @@ public class CopilotRunner {
         sb.append(agent.getPrePrompt() == null ? "" : agent.getPrePrompt());
         sb.append("\n\n## Agent 身份与使命\n").append(agent.getMission() == null ? "" : agent.getMission());
 
-        // 知识库目录：让 LLM 在决策是否调用 search_knowledge_base 之前知道有哪些资料
-        String catalog = buildKnowledgeCatalog(agent.getId());
-        if (catalog != null && !catalog.isEmpty()) {
-            sb.append("\n\n## 可用知识库目录\n").append(catalog);
+        // 拉一次启用状态文档，按 engageType 分两路使用：
+        //   1 → 进入「可用知识库目录」，等 LLM 通过工具按需检索
+        //   2 → 全文拼到「前置知识库」章节，主 Agent 直接可读，不走向量库
+        KnowledgeBundle kb = loadKnowledgeBundle(agent.getId());
+
+        if (kb.prependText != null && !kb.prependText.isEmpty()) {
+            sb.append("\n\n## 前置知识库（已全量提供，可直接引用）\n").append(kb.prependText);
+        }
+        if (kb.catalog != null && !kb.catalog.isEmpty()) {
+            sb.append("\n\n## 可用知识库目录（如需详情请调用工具）\n").append(kb.catalog);
         }
 
         if (req.getHistorySummary() != null && !req.getHistorySummary().isBlank()) {
@@ -225,40 +231,65 @@ public class CopilotRunner {
             }
         }
         sb.append("\n\n## 工具调用规则\n");
-        sb.append("- 上方【可用知识库目录】列出了当前 Agent 能检索到的全部文档及其摘要。\n");
-        sb.append("- 当用户问题与某条目录摘要相关时，必须调用 search_knowledge_base 工具按需检索具体片段，禁止凭空捏造。\n");
-        sb.append("- 当目录中没有任何与用户问题相关的条目，或问题属于寒暄/澄清/不需要资料支撑的范畴时，无需调用工具，直接给出最终回复。\n");
+        sb.append("- 上方【前置知识库】已提供完整正文，回答时可直接引用，无需调用工具。\n");
+        sb.append("- 上方【可用知识库目录】列出了可通过 search_knowledge_base 工具检索的文档及其摘要。\n");
+        sb.append("- 当用户问题与目录中某条摘要相关、且前置知识库不足以回答时，必须调用 search_knowledge_base 工具按需检索具体片段，禁止凭空捏造。\n");
+        sb.append("- 当问题属于寒暄/澄清/不需要资料支撑、或前置知识库已足够回答时，无需调用工具，直接给出最终回复。\n");
         sb.append("- 不需要调用工具时，直接给出最终回复（输出客户实际看到的那句话即可，不要再附思考过程）。\n");
         return sb.toString();
     }
 
     /**
-     * 拉取该 Agent 下启用状态的知识库标题 + 摘要，作为目录提供给 LLM。
-     * 拉不到时返回 null，buildSystemPrompt 自动忽略。
+     * 一次性查出 Agent 启用文档，按 engageType 分成 catalog（AI 自检索目录）和 prependText（前置全文）两份。
      */
-    private String buildKnowledgeCatalog(Long agentId) {
-        if (agentId == null) return null;
+    private KnowledgeBundle loadKnowledgeBundle(Long agentId) {
+        KnowledgeBundle kb = new KnowledgeBundle();
+        if (agentId == null) return kb;
         try {
             LambdaQueryWrapper<RagBase> qw = new LambdaQueryWrapper<>();
             qw.eq(RagBase::getAgentId, agentId);
             qw.eq(RagBase::getStatus, 1);
-            qw.select(RagBase::getId, RagBase::getTitle, RagBase::getSummary);
+            qw.select(RagBase::getId, RagBase::getTitle, RagBase::getSummary,
+                    RagBase::getEngageType, RagBase::getContent);
+            qw.orderByAsc(RagBase::getCreatedAt);
             List<RagBase> docs = ragBaseService.list(qw);
             if (docs == null || docs.isEmpty()) {
-                return "（当前 Agent 暂无知识库文档）";
+                kb.catalog = "（当前 Agent 暂无知识库文档）";
+                return kb;
             }
-            StringBuilder sb = new StringBuilder();
+            StringBuilder catalogSb = new StringBuilder();
+            StringBuilder prependSb = new StringBuilder();
+            int prependCount = 0;
             for (RagBase d : docs) {
                 String title = d.getTitle() == null ? "(无标题)" : d.getTitle();
-                String summary = d.getSummary() == null || d.getSummary().isBlank()
-                        ? "(暂无摘要)" : d.getSummary();
-                sb.append("- 《").append(title).append("》：").append(summary).append("\n");
+                Integer et = d.getEngageType();
+                if (et != null && et == RagBase.ENGAGE_PREPEND) {
+                    String content = d.getContent() == null ? "" : d.getContent();
+                    if (content.isBlank()) continue;
+                    if (prependCount > 0) prependSb.append("\n\n");
+                    prependSb.append("### ").append(title).append("\n").append(content);
+                    prependCount++;
+                } else {
+                    String summary = d.getSummary() == null || d.getSummary().isBlank()
+                            ? "(暂无摘要)" : d.getSummary();
+                    catalogSb.append("- 《").append(title).append("》：").append(summary).append("\n");
+                }
             }
-            return sb.toString();
+            kb.prependText = prependSb.length() == 0 ? null : prependSb.toString();
+            kb.catalog = catalogSb.length() == 0
+                    ? (prependCount > 0 ? null : "（当前 Agent 暂无可检索知识库文档）")
+                    : catalogSb.toString();
+            return kb;
         } catch (Exception e) {
-            log.warn("[Copilot] 构建知识库目录失败 agentId={}", agentId, e);
-            return null;
+            log.warn("[Copilot] 构建知识库包失败 agentId={}", agentId, e);
+            return kb;
         }
+    }
+
+    /** 知识库注入包：前置全文 + 自检索目录 */
+    private static class KnowledgeBundle {
+        String prependText;
+        String catalog;
     }
 
     private TaskSnapshot load(String uuid) {

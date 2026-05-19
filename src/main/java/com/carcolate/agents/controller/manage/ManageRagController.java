@@ -62,8 +62,11 @@ public class ManageRagController {
         }
         ragBase.setId(YitIdHelper.nextId());
         if (ragBase.getStatus() == null) ragBase.setStatus(1);
-        // 用户传入 summary 时尊重之；为空则调 LLM 现场生成
-        if (ragBase.getSummary() == null || ragBase.getSummary().isBlank()) {
+        if (ragBase.getEngageType() == null) ragBase.setEngageType(RagBase.ENGAGE_RAG_SEARCH);
+        // 前置知识库（engageType=2）走全量注入，不需要摘要；其余类型若用户没传 summary 则调 LLM 现场生成
+        boolean isPrepend = ragBase.getEngageType() != null
+                && ragBase.getEngageType() == RagBase.ENGAGE_PREPEND;
+        if (!isPrepend && (ragBase.getSummary() == null || ragBase.getSummary().isBlank())) {
             ragBase.setSummary(ragSummaryService.summarize(ragBase.getTitle(), ragBase.getContent()));
         }
         ragBase.setCreatedAt(Instant.now());
@@ -85,17 +88,23 @@ public class ManageRagController {
         if (old == null) {
             return Rsp.error(CodeMsg.DATA_NULL);
         }
-        // content 变化时强制重算摘要；其余情况若入参 summary 为空也尝试补一份
-        boolean contentChanged = ragBase.getContent() != null
-                && !ragBase.getContent().equals(old.getContent());
-        boolean needRegen = contentChanged
-                || ragBase.getSummary() == null || ragBase.getSummary().isBlank();
-        if (needRegen) {
-            String title = ragBase.getTitle() == null ? old.getTitle() : ragBase.getTitle();
-            String content = ragBase.getContent() == null ? old.getContent() : ragBase.getContent();
-            String summary = ragSummaryService.summarize(title, content);
-            if (summary != null) {
-                ragBase.setSummary(summary);
+        // 前置知识库不需要摘要；AI 自检索类型才走摘要生成逻辑
+        Integer effectiveEngage = ragBase.getEngageType() != null
+                ? ragBase.getEngageType() : old.getEngageType();
+        boolean isPrepend = effectiveEngage != null && effectiveEngage == RagBase.ENGAGE_PREPEND;
+        if (!isPrepend) {
+            // content 变化时强制重算摘要；其余情况若入参 summary 为空也尝试补一份
+            boolean contentChanged = ragBase.getContent() != null
+                    && !ragBase.getContent().equals(old.getContent());
+            boolean needRegen = contentChanged
+                    || ragBase.getSummary() == null || ragBase.getSummary().isBlank();
+            if (needRegen) {
+                String title = ragBase.getTitle() == null ? old.getTitle() : ragBase.getTitle();
+                String content = ragBase.getContent() == null ? old.getContent() : ragBase.getContent();
+                String summary = ragSummaryService.summarize(title, content);
+                if (summary != null) {
+                    ragBase.setSummary(summary);
+                }
             }
         }
         ragBase.setUpdatedAt(Instant.now());

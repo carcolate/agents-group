@@ -40,10 +40,20 @@ public class RagBase implements Serializable {
     private String summary;
 
     /**
+     * 参与时机：1=AI 自检索（向量化+工具按需调用） 2=前置知识库（不向量化，全文自动拼入 systemPrompt）
+     */
+    private Integer engageType;
+
+    /**
      * 状态：1启用 0禁用
      */
     private Integer status;
 
     private Instant createdAt;
     private Instant updatedAt;
+
+    /** 参与时机：AI 自检索（默认） */
+    public static final int ENGAGE_RAG_SEARCH = 1;
+    /** 参与时机：前置知识库（全量注入 systemPrompt） */
+    public static final int ENGAGE_PREPEND = 2;
 }

@@ -58,10 +58,12 @@ public class RagVectorService {
     @PostConstruct
     public void init() {
         try {
+            // 只向量化 engageType=1（或为空，兼容历史数据）的启用文档；engageType=2 走前置注入不入向量
             LambdaQueryWrapper<RagBase> qw = new LambdaQueryWrapper<>();
             qw.eq(RagBase::getStatus, 1);
+            qw.and(w -> w.eq(RagBase::getEngageType, RagBase.ENGAGE_RAG_SEARCH).or().isNull(RagBase::getEngageType));
             List<RagBase> all = ragBaseService.list(qw);
-            log.info("[RAG] 启动向量化：共 {} 条知识库记录", all.size());
+            log.info("[RAG] 启动向量化：共 {} 条 AI 自检索文档", all.size());
             for (RagBase rb : all) {
                 indexOne(rb);
             }
@@ -84,11 +86,12 @@ public class RagVectorService {
             LambdaQueryWrapper<RagBase> qw = new LambdaQueryWrapper<>();
             qw.eq(RagBase::getAgentId, agentId);
             qw.eq(RagBase::getStatus, 1);
+            qw.and(w -> w.eq(RagBase::getEngageType, RagBase.ENGAGE_RAG_SEARCH).or().isNull(RagBase::getEngageType));
             List<RagBase> list = ragBaseService.list(qw);
             for (RagBase rb : list) {
                 indexOne(rb);
             }
-            log.info("[RAG] 重建 agentId={} 完成，共 {} 条文档", agentId, list.size());
+            log.info("[RAG] 重建 agentId={} 完成，共 {} 条 AI 自检索文档", agentId, list.size());
         } catch (Exception e) {
             log.error("[RAG] 重建 agentId={} 失败", agentId, e);
         }
