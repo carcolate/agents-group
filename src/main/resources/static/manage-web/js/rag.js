@@ -116,7 +116,8 @@ async function submitForm() {
         toast('Agent / 标题 / 内容均必填', true);
         return;
     }
-    toast('保存中，正在生成摘要，请稍候…');
+    document.getElementById('loadingText').textContent = '保存中，正在生成摘要，请稍候…';
+    document.getElementById('loadingOverlay').classList.remove('hide');
     let rsp;
     if (id) {
         body.id = id;
@@ -124,6 +125,7 @@ async function submitForm() {
     } else {
         rsp = await API.post('/manage/rag/add', body);
     }
+    document.getElementById('loadingOverlay').classList.add('hide');
     if (tip(rsp, (id ? '已更新' : '已新增') + '，摘要已生成，向量库正在异步重建')) {
         closeEditor();
         loadList();

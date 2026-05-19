@@ -371,3 +371,41 @@ button.block { width: 100%; padding: 10px 14px; }
 }
 .final-reply h3 { margin: 0 0 8px; color: #27ae60; }
 .final-reply.hide { display: none; }
+
+/* ===== Loading Overlay ===== */
+.loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.loading-overlay.hide {
+    display: none;
+}
+.loading-box {
+    background: #fff;
+    border-radius: 10px;
+    padding: 36px 48px;
+    text-align: center;
+    box-shadow: 0 4px 24px rgba(0,0,0,.25);
+}
+.loading-spinner {
+    width: 36px;
+    height: 36px;
+    margin: 0 auto 16px;
+    border: 4px solid #ebeef5;
+    border-top-color: #409eff;
+    border-radius: 50%;
+    animation: loading-rotate 0.8s linear infinite;
+}
+@keyframes loading-rotate {
+    to { transform: rotate(360deg); }
+}
+.loading-box p {
+    margin: 0;
+    font-size: 14px;
+    color: #2c3e50;
+}
