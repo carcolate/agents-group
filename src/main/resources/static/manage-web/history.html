@@ -68,25 +68,15 @@
     </section>
 </main>
 
-<div id="detailModal" class="modal hide">
-    <div class="modal-mask" onclick="closeDetail()"></div>
-    <div class="modal-body wide">
+<div id="modal-overlay" class="modal-overlay hide">
+    <div class="modal-dialog" onclick="event.stopPropagation()">
         <div class="modal-header">
-            <h3>调用详情</h3>
-            <span class="close" onclick="closeDetail()">×</span>
+            <h3>完整信息</h3>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
         </div>
-        <div class="modal-content">
-            <div id="detailMeta" class="desc"></div>
-            <div id="detailFinal" class="final-reply hide" style="margin-top:12px;">
-                <h3>最终回复</h3>
-                <div id="detailFinalText"></div>
-            </div>
-            <h3 style="margin-top:18px;">ReAct 轨迹</h3>
-            <div id="detailSteps" class="steps"></div>
-            <p class="desc" id="detailEmpty" style="display:none;">Redis 中已无该任务快照（已过期或未启动）。</p>
-        </div>
-        <div class="modal-footer">
-            <button onclick="closeDetail()">关闭</button>
+        <div class="modal-body">
+            <div class="modal-meta"></div>
+            <pre></pre>
         </div>
     </div>
 </div>

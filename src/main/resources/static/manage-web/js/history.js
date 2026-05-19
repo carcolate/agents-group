@@ -145,8 +145,14 @@ async function openDetail(uuid) {
                 <pre>${escapeHtml(s.content || '')}</pre>
                 ${s.toolArgs ? `<pre class="mono">args: ${escapeHtml(s.toolArgs)}</pre>` : ''}
             </div>
+            <span class="show-all-btn hide" onclick="showFullStep(this)">... 显示全部</span>
         </div>
     `).join('');
+    wrap.querySelectorAll('.step-content').forEach(el => {
+        if (el.scrollHeight > el.clientHeight) {
+            el.parentNode.querySelector('.show-all-btn').classList.remove('hide');
+        }
+    });
 }
 
 function closeDetail() { hideModal('detailModal'); }

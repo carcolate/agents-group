@@ -94,32 +94,3 @@ function renderSteps(snap) {
         document.getElementById('final_text').textContent = snap.finalReply;
     }
 }
-
-function showFullStep(btn) {
-    const step = btn.parentNode;
-    const type = step.querySelector('.type').textContent;
-    const time = step.querySelector('.time').textContent;
-    const contentEl = step.querySelector('.step-content');
-    const texts = [];
-    contentEl.querySelectorAll('pre').forEach(pre => texts.push(pre.textContent));
-    const overlay = document.getElementById('modal-overlay');
-    overlay.querySelector('.modal-meta').textContent = type + ' · ' + time;
-    overlay.querySelector('.modal-body pre').textContent = texts.join('\n');
-    overlay.classList.remove('hide');
-}
-
-function closeModal() {
-    document.getElementById('modal-overlay').classList.add('hide');
-}
-
-document.addEventListener('DOMContentLoaded', function () {
-    document.getElementById('modal-overlay').addEventListener('click', function (e) {
-        if (e.target === this) closeModal();
-    });
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') {
-            const overlay = document.getElementById('modal-overlay');
-            if (!overlay.classList.contains('hide')) closeModal();
-        }
-    });
-});
