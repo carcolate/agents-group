@@ -1,6 +1,35 @@
 let agentPage = { pageNum: 1, pageSize: 20, total: 0 };
+let availableModels = [];
 
-window.addEventListener('DOMContentLoaded', loadList);
+window.addEventListener('DOMContentLoaded', async () => {
+    await loadAvailableModels();
+    await loadList();
+    initDragDrop();
+});
+
+async function loadAvailableModels() {
+    try {
+        const rsp = await API.get('/manage/agent/availableModels');
+        if (rsp.code === 0 && Array.isArray(rsp.data)) {
+            availableModels = rsp.data;
+        }
+    } catch (e) {
+        console.warn('加载可用模型失败', e);
+        availableModels = [];
+    }
+    renderModelSelect();
+}
+
+function renderModelSelect() {
+    const sel = document.getElementById('f_model_name');
+    if (!sel) return;
+    const defaultLabel = availableModels.length
+        ? `默认（${availableModels[0]}）`
+        : '默认';
+    let html = `<option value="">${escapeHtml(defaultLabel)}</option>`;
+    html += availableModels.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+    sel.innerHTML = html;
+}
 
 async function loadList() {
     const params = {
@@ -57,6 +86,7 @@ async function openEditor(id) {
     document.getElementById('f_name').value = '';
     document.getElementById('f_mission').value = '';
     document.getElementById('f_pre_prompt').value = '';
+    renderModelSelect();
     document.getElementById('f_model_name').value = '';
     document.getElementById('f_temperature').value = '';
     document.getElementById('f_max_steps').value = '6';
@@ -70,13 +100,30 @@ async function openEditor(id) {
         document.getElementById('f_name').value = a.name || '';
         document.getElementById('f_mission').value = a.mission || '';
         document.getElementById('f_pre_prompt').value = a.prePrompt || '';
-        document.getElementById('f_model_name').value = a.modelName || '';
+        setModelSelectValue(a.modelName);
         document.getElementById('f_temperature').value = a.temperature == null ? '' : a.temperature;
         document.getElementById('f_max_steps').value = a.maxSteps || 6;
         document.getElementById('f_status').value = a.status == null ? '1' : String(a.status);
         document.getElementById('f_remark').value = a.remark || '';
     }
     showModal('editor');
+}
+
+function setModelSelectValue(modelName) {
+    const sel = document.getElementById('f_model_name');
+    if (!sel) return;
+    if (!modelName) {
+        sel.value = '';
+        return;
+    }
+    const exists = Array.from(sel.options).some(o => o.value === modelName);
+    if (!exists) {
+        const opt = document.createElement('option');
+        opt.value = modelName;
+        opt.textContent = modelName + '（已下架）';
+        sel.appendChild(opt);
+    }
+    sel.value = modelName;
 }
 
 function closeEditor() { hideModal('editor'); }
@@ -87,7 +134,7 @@ async function submitForm() {
         name: document.getElementById('f_name').value.trim(),
         mission: document.getElementById('f_mission').value.trim(),
         prePrompt: document.getElementById('f_pre_prompt').value,
-        modelName: document.getElementById('f_model_name').value.trim() || null,
+        modelName: (document.getElementById('f_model_name').value || '').trim() || null,
         temperature: document.getElementById('f_temperature').value === '' ? null : Number(document.getElementById('f_temperature').value),
         maxSteps: Number(document.getElementById('f_max_steps').value) || 6,
         status: Number(document.getElementById('f_status').value),
@@ -114,4 +161,35 @@ async function delAgent(id) {
     if (!confirm('确认删除该 Agent？此操作不可恢复，建议先确认无关联知识库。')) return;
     const rsp = await API.post('/manage/agent/delete', null, { id });
     if (tip(rsp, '已删除')) loadList();
+}
+
+function initDragDrop() {
+    const ta = document.getElementById('f_pre_prompt');
+    ta.addEventListener('dragover', e => {
+        e.preventDefault();
+        ta.style.borderColor = '#2364c8';
+        ta.style.background = '#f0f6ff';
+    });
+    ta.addEventListener('dragleave', () => {
+        ta.style.borderColor = '';
+        ta.style.background = '';
+    });
+    ta.addEventListener('drop', e => {
+        e.preventDefault();
+        ta.style.borderColor = '';
+        ta.style.background = '';
+        const files = e.dataTransfer.files;
+        if (!files.length) return;
+        const file = files[0];
+        if (!file.name.toLowerCase().endsWith('.md') && !file.name.toLowerCase().endsWith('.txt')) {
+            toast('仅支持 .md 或 .txt 文件', true);
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            ta.value = reader.result;
+            ta.dispatchEvent(new Event('input'));
+        };
+        reader.readAsText(file, 'UTF-8');
+    });
 }
