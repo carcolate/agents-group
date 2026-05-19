@@ -1,0 +1,28 @@
+services:
+  carcolate-agents:
+    image: harbor.winhouse.life/car/carcolate-agents-service-api:latest
+    container_name: carcolate-agents-service
+    restart: always
+    ports:
+      - "7893:7893"
+    environment:
+      - SERVER_PORT=7893
+
+      - REDIS_HOST=192.168.2.183
+      - REDIS_PORT=6380
+      - REDIS_PASSWORD=123456
+      - REDIS_DATABASE=2
+
+      - DB_URL=jdbc:mysql://192.168.2.183:3308/car_agents?useUnicode=true&characterEncoding=UTF-8&serverTimezone=GMT%2B8
+      - DB_USERNAME=root
+      - DB_PASSWORD=rootroot
+
+      - LLM_BASE_URL=https://ai.v.qxhua21.cn/v1
+      - LLM_API_KEY=sk-YeMVRsDuGZfpW2jhNzt0rnbbPB3qimWRdtwNHoiM6qMxMg5T
+      - LLM_AVAILABLE_MODELS=doubao-seed-2.0-lite,glm-5,qwen3.6-plus,kimi-k2.5
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
