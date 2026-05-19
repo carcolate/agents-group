@@ -17,7 +17,8 @@ public class CopilotHistoryServiceImpl extends ServiceImpl<CopilotHistoryMapper,
         implements CopilotHistoryService {
 
     @Override
-    public void recordFromSnapshot(TaskSnapshot snap, String userMessage, int llmRound, long costMs) {
+    public void recordFromSnapshot(TaskSnapshot snap, String userMessage, String modelName,
+                                   int llmRound, long costMs) {
         if (snap == null) {
             return;
         }
@@ -27,6 +28,7 @@ public class CopilotHistoryServiceImpl extends ServiceImpl<CopilotHistoryMapper,
             h.setUuid(snap.getUuid());
             h.setAgentId(snap.getAgentId());
             h.setAgentName(snap.getAgentName());
+            h.setModelName(modelName);
             h.setUserMessage(userMessage);
             h.setFinalReply(snap.getFinalReply());
             h.setStatus(snap.getStatus());

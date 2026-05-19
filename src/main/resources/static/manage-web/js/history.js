@@ -61,12 +61,13 @@ function renderList(rows, total) {
     historyPage.total = total;
     const tbody = document.getElementById('tbody');
     if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#95a5a6;">暂无数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#95a5a6;">暂无数据</td></tr>';
     } else {
         tbody.innerHTML = rows.map(r => `
             <tr>
                 <td><span class="mono">${escapeHtml(formatTime(r.createdAt))}</span></td>
                 <td>${escapeHtml(agentName(r.agentId, r.agentName))}</td>
+                <td><span class="mono" title="${escapeHtml(r.modelName || '')}">${escapeHtml(r.modelName || '-')}</span></td>
                 <td title="${escapeHtml(r.userMessage || '')}">${escapeHtml(truncate(r.userMessage, 60))}</td>
                 <td title="${escapeHtml(r.finalReply || '')}">${escapeHtml(truncate(r.finalReply, 80))}</td>
                 <td>${statusBadge(r.status)}</td>
@@ -124,6 +125,7 @@ async function openDetail(uuid) {
     document.getElementById('detailMeta').innerHTML =
         `UUID: <span class="mono">${escapeHtml(snap.uuid || uuid)}</span> · `
         + `Agent: ${escapeHtml(snap.agentName || ('#' + (snap.agentId || '?')))} · `
+        + (snap.modelName ? `模型: <span class="mono">${escapeHtml(snap.modelName)}</span> · ` : '')
         + `状态: ${escapeHtml(snap.status || '-')} · `
         + `开始: ${escapeHtml(formatTime(snap.createdAt))} · `
         + `结束: ${escapeHtml(formatTime(snap.finishedAt))}`

@@ -70,8 +70,16 @@ public class CopilotRunner {
     public void run(String uuid, Agent agent, CopilotRequest req) {
         long startMs = System.currentTimeMillis();
         int[] llmRoundRef = new int[]{0};
+        // 提前解析"实际调用的模型名"，落历史时一并存
+        String actualModel = resolveActualModelName(agent);
+        // 将模型名写入快照，详情页可直接展示
+        TaskSnapshot initSnap = load(uuid);
+        if (initSnap != null) {
+            initSnap.setModelName(actualModel);
+            save(initSnap);
+        }
         try {
-            doRun(uuid, agent, req, startMs, llmRoundRef);
+            doRun(uuid, agent, req, actualModel, startMs, llmRoundRef);
         } catch (Exception e) {
             log.error("[Copilot] uuid={} 执行异常", uuid, e);
             TaskSnapshot snap = load(uuid);
@@ -81,11 +89,27 @@ public class CopilotRunner {
             snap.setErrorMsg(e.getMessage());
             snap.setFinishedAt(Instant.now());
             save(snap);
-            persistHistory(snap, req, llmRoundRef[0], startMs);
+            persistHistory(snap, req, actualModel, llmRoundRef[0], startMs);
         }
     }
 
-    private void doRun(String uuid, Agent agent, CopilotRequest req, long startMs, int[] llmRoundRef) {
+    /**
+     * 解析本次实际会用的模型：Agent 显式指定 → 用 Agent 的；否则回落到 LangChainConfig 默认（available-models 第一项）。
+     * 解析失败（默认列表也没配）时返回 null，避免主流程崩溃。
+     */
+    private String resolveActualModelName(Agent agent) {
+        if (agent != null && agent.getModelName() != null && !agent.getModelName().isBlank()) {
+            return agent.getModelName();
+        }
+        try {
+            return langChainConfig.getDefaultModelName();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void doRun(String uuid, Agent agent, CopilotRequest req, String actualModel,
+                       long startMs, int[] llmRoundRef) {
         String systemPrompt = buildSystemPrompt(agent, req);
         TaskSnapshot snap = load(uuid);
         if (snap != null) {
@@ -123,7 +147,7 @@ public class CopilotRunner {
             if (!hasToolCall) {
                 String finalReply = applyStylePolish(uuid, chatModel, agent, thinkText);
                 appendStep(uuid, StepRecord.of(StepType.FINAL_REPLY.getCode(), finalReply));
-                markDone(uuid, finalReply, req, llmRoundRef[0], startMs);
+                markDone(uuid, finalReply, req, actualModel, llmRoundRef[0], startMs);
                 return;
             }
 
@@ -152,7 +176,7 @@ public class CopilotRunner {
             }
         }
         markFailed(uuid, "超过最大决策轮数(" + maxSteps + ")，未产出最终回复",
-                req, llmRoundRef[0], startMs);
+                req, actualModel, llmRoundRef[0], startMs);
     }
 
     /**
@@ -345,17 +369,19 @@ public class CopilotRunner {
         save(snap);
     }
 
-    private void markDone(String uuid, String finalReply, CopilotRequest req, int llmRound, long startMs) {
+    private void markDone(String uuid, String finalReply, CopilotRequest req, String actualModel,
+                          int llmRound, long startMs) {
         TaskSnapshot snap = load(uuid);
         if (snap == null) return;
         snap.setStatus(TaskStatus.SUCCESS.getCode());
         snap.setFinalReply(finalReply);
         snap.setFinishedAt(Instant.now());
         save(snap);
-        persistHistory(snap, req, llmRound, startMs);
+        persistHistory(snap, req, actualModel, llmRound, startMs);
     }
 
-    private void markFailed(String uuid, String reason, CopilotRequest req, int llmRound, long startMs) {
+    private void markFailed(String uuid, String reason, CopilotRequest req, String actualModel,
+                            int llmRound, long startMs) {
         TaskSnapshot snap = load(uuid);
         if (snap == null) return;
         snap.getSteps().add(StepRecord.of(StepType.ERROR.getCode(), reason));
@@ -363,13 +389,14 @@ public class CopilotRunner {
         snap.setErrorMsg(reason);
         snap.setFinishedAt(Instant.now());
         save(snap);
-        persistHistory(snap, req, llmRound, startMs);
+        persistHistory(snap, req, actualModel, llmRound, startMs);
     }
 
-    private void persistHistory(TaskSnapshot snap, CopilotRequest req, int llmRound, long startMs) {
+    private void persistHistory(TaskSnapshot snap, CopilotRequest req, String actualModel,
+                                int llmRound, long startMs) {
         String userMsg = req == null ? null : req.getCurrentMessage();
         long costMs = System.currentTimeMillis() - startMs;
-        copilotHistoryService.recordFromSnapshot(snap, userMsg, llmRound, costMs);
+        copilotHistoryService.recordFromSnapshot(snap, userMsg, actualModel, llmRound, costMs);
     }
 
     private void save(TaskSnapshot snap) {

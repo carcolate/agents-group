@@ -8,6 +8,9 @@ public interface CopilotHistoryService extends IService<CopilotHistory> {
 
     /**
      * 任务结束时调用：根据最终快照 + 用户原始消息持久化一条历史
+     *
+     * @param modelName 本次实际调用的模型名（Agent 设了走自定义，否则回落全局默认）
      */
-    void recordFromSnapshot(TaskSnapshot snap, String userMessage, int llmRound, long costMs);
+    void recordFromSnapshot(TaskSnapshot snap, String userMessage, String modelName,
+                            int llmRound, long costMs);
 }

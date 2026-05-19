@@ -51,6 +51,7 @@ CREATE TABLE `tb_copilot_history` (
   `uuid` VARCHAR(64) NOT NULL COMMENT '任务 UUID（与 Redis 中 TaskSnapshot 对应）',
   `agent_id` BIGINT NOT NULL COMMENT 'Agent ID',
   `agent_name` VARCHAR(64) DEFAULT NULL COMMENT 'Agent 名称（冗余便于列表展示）',
+  `model_name` VARCHAR(64) DEFAULT NULL COMMENT '实际调用的模型名（Agent 自定义 → 取自定义；空 → 回落到全局默认）',
   `user_message` MEDIUMTEXT NOT NULL COMMENT '用户当前消息（仅 currentMessage）',
   `final_reply` MEDIUMTEXT NULL COMMENT 'Agent 最终回复（终稿）',
   `status` VARCHAR(16) NOT NULL COMMENT '任务状态：SUCCESS / FAILED',
