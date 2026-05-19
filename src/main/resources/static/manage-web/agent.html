@@ -77,8 +77,9 @@
             </div>
             <div class="form-row two">
                 <div>
-                    <label>模型名（留空走默认）</label>
-                    <select id="f_model_name"></select>
+                    <label>模型名（可选可输入，留空走默认）</label>
+                    <input id="f_model_name" list="modelList" autocomplete="off" placeholder="点击选择或手动输入模型名" />
+                    <datalist id="modelList"></datalist>
                 </div>
                 <div>
                     <label>温度（0~1，留空走全局）</label>

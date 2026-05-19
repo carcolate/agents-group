@@ -21,14 +21,17 @@ async function loadAvailableModels() {
 }
 
 function renderModelSelect() {
-    const sel = document.getElementById('f_model_name');
-    if (!sel) return;
-    const defaultLabel = availableModels.length
-        ? `默认（${availableModels[0]}）`
-        : '默认';
-    let html = `<option value="">${escapeHtml(defaultLabel)}</option>`;
-    html += availableModels.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
-    sel.innerHTML = html;
+    const list = document.getElementById('modelList');
+    const input = document.getElementById('f_model_name');
+    if (input) {
+        input.placeholder = availableModels.length
+            ? `点击选择或手动输入；留空走默认（${availableModels[0]}）`
+            : '请手动输入模型名（配置文件未列出可选项）';
+    }
+    if (!list) return;
+    list.innerHTML = availableModels
+        .map(m => `<option value="${escapeHtml(m)}"></option>`)
+        .join('');
 }
 
 async function loadList() {
@@ -102,7 +105,6 @@ async function openEditor(id) {
         document.getElementById('f_mission').value = a.mission || '';
         document.getElementById('f_pre_prompt').value = a.prePrompt || '';
         document.getElementById('f_style_prompt').value = a.stylePrompt || '';
-        document.getElementById('f_style_prompt').value = a.stylePrompt || '';
         setModelSelectValue(a.modelName);
         document.getElementById('f_temperature').value = a.temperature == null ? '' : a.temperature;
         document.getElementById('f_max_steps').value = a.maxSteps || 6;
@@ -113,20 +115,9 @@ async function openEditor(id) {
 }
 
 function setModelSelectValue(modelName) {
-    const sel = document.getElementById('f_model_name');
-    if (!sel) return;
-    if (!modelName) {
-        sel.value = '';
-        return;
-    }
-    const exists = Array.from(sel.options).some(o => o.value === modelName);
-    if (!exists) {
-        const opt = document.createElement('option');
-        opt.value = modelName;
-        opt.textContent = modelName + '（已下架）';
-        sel.appendChild(opt);
-    }
-    sel.value = modelName;
+    const input = document.getElementById('f_model_name');
+    if (!input) return;
+    input.value = modelName || '';
 }
 
 function closeEditor() { hideModal('editor'); }
