@@ -16,8 +16,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addViewControllers(ViewControllerRegistry registry) {
-        registry.addRedirectViewController("/", "/manage-web/index.html");
-        registry.addRedirectViewController("/manage-web", "/manage-web/index.html");
-        registry.addRedirectViewController("/manage-web/", "/manage-web/index.html");
+        registry.addViewController("/").setViewName("forward:/manage-web/index.html");
+        registry.addViewController("/manage-web").setViewName("forward:/manage-web/index.html");
+        registry.addViewController("/manage-web/").setViewName("forward:/manage-web/index.html");
     }
 }
