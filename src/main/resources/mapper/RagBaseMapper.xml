@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.carcolate.agents.mapper.RagBaseMapper">
+
+    <select id="List" resultType="com.carcolate.agents.domain.RagBase">
+        SELECT r.* FROM tb_rag_base AS r
+        <where>
+            <if test="p.id!=null">
+                AND r.id = #{p.id}
+            </if>
+            <if test="p.agentId!=null and p.agentId>0">
+                AND r.agent_id = #{p.agentId}
+            </if>
+            <if test="p.title!=null and p.title!=''">
+                AND r.title LIKE CONCAT('%', #{p.title}, '%')
+            </if>
+            <if test="p.status!=null">
+                AND r.status = #{p.status}
+            </if>
+        </where>
+        ORDER BY r.created_at DESC
+    </select>
+
+</mapper>
