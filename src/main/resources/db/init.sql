@@ -41,6 +41,29 @@ CREATE TABLE `tb_rag_base` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Agent 知识库（启动时向量化到内存）';
 
 -- ============================
+-- Copilot 调用历史表
+-- ============================
+DROP TABLE IF EXISTS `tb_copilot_history`;
+CREATE TABLE `tb_copilot_history` (
+  `id` BIGINT NOT NULL COMMENT '雪花ID',
+  `uuid` VARCHAR(64) NOT NULL COMMENT '任务 UUID（与 Redis 中 TaskSnapshot 对应）',
+  `agent_id` BIGINT NOT NULL COMMENT 'Agent ID',
+  `agent_name` VARCHAR(64) DEFAULT NULL COMMENT 'Agent 名称（冗余便于列表展示）',
+  `user_message` MEDIUMTEXT NOT NULL COMMENT '用户当前消息（仅 currentMessage）',
+  `final_reply` MEDIUMTEXT NULL COMMENT 'Agent 最终回复（终稿）',
+  `status` VARCHAR(16) NOT NULL COMMENT '任务状态：SUCCESS / FAILED',
+  `error_msg` VARCHAR(1024) NULL COMMENT '失败原因',
+  `step_count` INT NOT NULL DEFAULT 0 COMMENT '步骤数（含 USER_INPUT/LLM_THINK/TOOL_*/STYLE_REWRITE/FINAL_REPLY/ERROR）',
+  `llm_round` INT NOT NULL DEFAULT 0 COMMENT '主 ReAct 调用 LLM 的轮次',
+  `cost_ms` BIGINT NOT NULL DEFAULT 0 COMMENT '总耗时（毫秒）',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '任务开始时间',
+  `finished_at` DATETIME NULL COMMENT '任务结束时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_uuid` (`uuid`),
+  KEY `idx_agent_created` (`agent_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Copilot 调用历史';
+
+-- ============================
 -- 示例数据：极石汽车销售专家
 -- ============================
 INSERT INTO `tb_agent`(`id`,`name`,`mission`,`pre_prompt`,`max_steps`,`status`,`remark`)

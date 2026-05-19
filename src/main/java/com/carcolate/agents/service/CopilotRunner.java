@@ -47,13 +47,18 @@ public class CopilotRunner {
     @Autowired
     private RagSearchTool ragSearchTool;
 
+    @Autowired
+    private CopilotHistoryService copilotHistoryService;
+
     @Value("${copilot.task.ttl-seconds:86400}")
     private long ttlSeconds;
 
     @Async("copilotExecutor")
     public void run(String uuid, Agent agent, CopilotRequest req) {
+        long startMs = System.currentTimeMillis();
+        int[] llmRoundRef = new int[]{0};
         try {
-            doRun(uuid, agent, req);
+            doRun(uuid, agent, req, startMs, llmRoundRef);
         } catch (Exception e) {
             log.error("[Copilot] uuid={} 执行异常", uuid, e);
             TaskSnapshot snap = load(uuid);
@@ -63,10 +68,11 @@ public class CopilotRunner {
             snap.setErrorMsg(e.getMessage());
             snap.setFinishedAt(Instant.now());
             save(snap);
+            persistHistory(snap, req, llmRoundRef[0], startMs);
         }
     }
 
-    private void doRun(String uuid, Agent agent, CopilotRequest req) {
+    private void doRun(String uuid, Agent agent, CopilotRequest req, long startMs, int[] llmRoundRef) {
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(SystemMessage.from(buildSystemPrompt(agent, req)));
         messages.add(UserMessage.from(req.getCurrentMessage()));
@@ -77,6 +83,7 @@ public class CopilotRunner {
 
         int maxSteps = agent.getMaxSteps() == null || agent.getMaxSteps() <= 0 ? 6 : agent.getMaxSteps();
         for (int i = 0; i < maxSteps; i++) {
+            llmRoundRef[0] = i + 1;
             ChatRequest chatRequest = ChatRequest.builder()
                     .messages(messages)
                     .toolSpecifications(List.of(ragSearchTool.spec()))
@@ -96,7 +103,7 @@ public class CopilotRunner {
             if (!hasToolCall) {
                 String finalReply = applyStylePolish(uuid, chatModel, agent, thinkText);
                 appendStep(uuid, StepRecord.of(StepType.FINAL_REPLY.getCode(), finalReply));
-                markDone(uuid, finalReply);
+                markDone(uuid, finalReply, req, llmRoundRef[0], startMs);
                 return;
             }
 
@@ -122,7 +129,8 @@ public class CopilotRunner {
                 messages.add(ToolExecutionResultMessage.from(call, toolResult));
             }
         }
-        markFailed(uuid, "超过最大决策轮数(" + maxSteps + ")，未产出最终回复");
+        markFailed(uuid, "超过最大决策轮数(" + maxSteps + ")，未产出最终回复",
+                req, llmRoundRef[0], startMs);
     }
 
     /**
@@ -200,16 +208,17 @@ public class CopilotRunner {
         save(snap);
     }
 
-    private void markDone(String uuid, String finalReply) {
+    private void markDone(String uuid, String finalReply, CopilotRequest req, int llmRound, long startMs) {
         TaskSnapshot snap = load(uuid);
         if (snap == null) return;
         snap.setStatus(TaskStatus.SUCCESS.getCode());
         snap.setFinalReply(finalReply);
         snap.setFinishedAt(Instant.now());
         save(snap);
+        persistHistory(snap, req, llmRound, startMs);
     }
 
-    private void markFailed(String uuid, String reason) {
+    private void markFailed(String uuid, String reason, CopilotRequest req, int llmRound, long startMs) {
         TaskSnapshot snap = load(uuid);
         if (snap == null) return;
         snap.getSteps().add(StepRecord.of(StepType.ERROR.getCode(), reason));
@@ -217,6 +226,13 @@ public class CopilotRunner {
         snap.setErrorMsg(reason);
         snap.setFinishedAt(Instant.now());
         save(snap);
+        persistHistory(snap, req, llmRound, startMs);
+    }
+
+    private void persistHistory(TaskSnapshot snap, CopilotRequest req, int llmRound, long startMs) {
+        String userMsg = req == null ? null : req.getCurrentMessage();
+        long costMs = System.currentTimeMillis() - startMs;
+        copilotHistoryService.recordFromSnapshot(snap, userMsg, llmRound, costMs);
     }
 
     private void save(TaskSnapshot snap) {
