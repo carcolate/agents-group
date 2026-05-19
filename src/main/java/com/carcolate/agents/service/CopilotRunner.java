@@ -11,6 +11,7 @@ import com.carcolate.agents.dto.CopilotRequest;
 import com.carcolate.agents.dto.StepRecord;
 import com.carcolate.agents.dto.TaskSnapshot;
 import com.carcolate.agents.response.utils.RedisKeys;
+import com.carcolate.agents.tools.RagFetchTool;
 import com.carcolate.agents.tools.RagSearchTool;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;
@@ -48,6 +49,9 @@ public class CopilotRunner {
 
     @Autowired
     private RagSearchTool ragSearchTool;
+
+    @Autowired
+    private RagFetchTool ragFetchTool;
 
     @Autowired
     private RagBaseService ragBaseService;
@@ -97,7 +101,7 @@ public class CopilotRunner {
             llmRoundRef[0] = i + 1;
             ChatRequest chatRequest = ChatRequest.builder()
                     .messages(messages)
-                    .toolSpecifications(List.of(ragSearchTool.spec()))
+                    .toolSpecifications(List.of(ragSearchTool.spec(), ragFetchTool.spec()))
                     .build();
 
             ChatResponse resp = chatModel.chat(chatRequest);
@@ -129,6 +133,8 @@ public class CopilotRunner {
                 String toolResult;
                 if (RagSearchTool.TOOL_NAME.equals(call.name())) {
                     toolResult = ragSearchTool.invoke(agent.getId(), call.arguments());
+                } else if (RagFetchTool.TOOL_NAME.equals(call.name())) {
+                    toolResult = ragFetchTool.invoke(agent.getId(), call.arguments());
                 } else {
                     toolResult = "未知工具：" + call.name();
                 }
@@ -232,9 +238,12 @@ public class CopilotRunner {
         }
         sb.append("\n\n## 工具调用规则\n");
         sb.append("- 上方【前置知识库】已提供完整正文，回答时可直接引用，无需调用工具。\n");
-        sb.append("- 上方【可用知识库目录】列出了可通过 search_knowledge_base 工具检索的文档及其摘要。\n");
-        sb.append("- 当用户问题与目录中某条摘要相关、且前置知识库不足以回答时，必须调用 search_knowledge_base 工具按需检索具体片段，禁止凭空捏造。\n");
-        sb.append("- 当问题属于寒暄/澄清/不需要资料支撑、或前置知识库已足够回答时，无需调用工具，直接给出最终回复。\n");
+        sb.append("- 上方【可用知识库目录】每条记录前的 [ID=xxx] 是该文档的 ragId。\n");
+        sb.append("- 可用工具：\n");
+        sb.append("  · search_knowledge_base(query, topK?)：按语义关键字检索片段，适合不确定答案落在哪个文档时使用。\n");
+        sb.append("  · get_knowledge_document(ragId)：直接拉取指定文档的全量正文+概览，适合已经在目录里锁定目标文档、需要完整内容时使用。\n");
+        sb.append("- 决策顺序：前置知识库够用 → 直接回答；目录里能精准锁定某文档 → 用 get_knowledge_document 取全文；只有模糊关键字 → 用 search_knowledge_base 检索片段。\n");
+        sb.append("- 严禁凭空捏造未在【前置知识库】或工具返回结果中出现的事实、参数、价格。\n");
         sb.append("- 不需要调用工具时，直接给出最终回复（输出客户实际看到的那句话即可，不要再附思考过程）。\n");
         return sb.toString();
     }
@@ -272,7 +281,8 @@ public class CopilotRunner {
                 } else {
                     String summary = d.getSummary() == null || d.getSummary().isBlank()
                             ? "(暂无摘要)" : d.getSummary();
-                    catalogSb.append("- 《").append(title).append("》：").append(summary).append("\n");
+                    catalogSb.append("- [ID=").append(d.getId()).append("] 《")
+                            .append(title).append("》：").append(summary).append("\n");
                 }
             }
             kb.prependText = prependSb.length() == 0 ? null : prependSb.toString();
