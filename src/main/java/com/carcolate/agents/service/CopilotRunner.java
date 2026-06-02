@@ -271,7 +271,14 @@ public class CopilotRunner {
                         .mimeType(img.getMimeType())
                         .build();
                 messages.add(UserMessage.from(TextContent.from(prefix), ImageContent.from(image)));
-                String source = img.isFromCache() ? "缓存命中" : "下载成功";
+                String source;
+                if (img.isFromCache()) {
+                    source = "缓存命中";
+                } else if (img.isCached()) {
+                    source = "下载成功(已落盘)";
+                } else {
+                    source = "下载成功(落盘失败)";
+                }
                 appendStep(uuid, StepRecord.of(StepType.IMAGE_FETCH.getCode(),
                         source + " url=" + url
                                 + " mime=" + img.getMimeType()

@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -52,9 +53,9 @@ public class RemoteImageFetcher {
 
     /**
      * 本地文件缓存目录。命中后跳过 HTTP 下载，直接读盘。
-     * 默认走 JVM 系统 temp 子目录；Docker 部署可在 Dockerfile 中通过 ENV 覆盖到挂载盘。
+     * 默认 {@code ./cache}（app.jar 同级的运行目录下）；Docker 部署在 Dockerfile 中通过 ENV 覆盖到 /app/cache。
      */
-    @Value("${copilot.image.cache-dir:#{systemProperties['java.io.tmpdir']}/copilot-images}")
+    @Value("${copilot.image.cache-dir:./cache}")
     private String cacheDir;
 
     @PostConstruct
@@ -87,7 +88,7 @@ public class RemoteImageFetcher {
                 if (data.length > 0 && !mime.isBlank() && isAllowed(mime)) {
                     String base64 = Base64.getEncoder().encodeToString(data);
                     long cost = System.currentTimeMillis() - startMs;
-                    return new FetchedImage(base64, mime, data.length, cost, true);
+                    return new FetchedImage(base64, mime, data.length, cost, true, true);
                 }
                 log.warn("[ImageCache] 缓存文件不可用，回退下载 md5={} mime={} bytes={}",
                         md5, mime, data.length);
@@ -120,10 +121,10 @@ public class RemoteImageFetcher {
                 throw new IOException("MIME 不在白名单: " + mime);
             }
             // 3) 写入本地缓存（先 .tmp 再 rename，避免半成品被命中）
-            writeCache(md5, data, mime);
+            boolean cached = writeCache(md5, data, mime);
             String base64 = Base64.getEncoder().encodeToString(data);
             long cost = System.currentTimeMillis() - startMs;
-            return new FetchedImage(base64, mime, data.length, cost, false);
+            return new FetchedImage(base64, mime, data.length, cost, false, cached);
         }
     }
 
@@ -144,22 +145,56 @@ public class RemoteImageFetcher {
         }
     }
 
-    private void writeCache(String md5, byte[] data, String mime) {
+    /**
+     * 把下载好的图片落盘到 {@code {md5}.dat + {md5}.mime}。
+     * @return true = 落盘成功（两个文件都已就位）；false = 任何环节失败
+     */
+    private boolean writeCache(String md5, byte[] data, String mime) {
+        Path dir = Paths.get(cacheDir);
+        Path dataFile = dir.resolve(md5 + ".dat");
+        Path mimeFile = dir.resolve(md5 + ".mime");
+        Path dataTmp = dir.resolve(md5 + ".dat.tmp");
+        Path mimeTmp = dir.resolve(md5 + ".mime.tmp");
         try {
-            Path dir = Paths.get(cacheDir);
             if (!Files.exists(dir)) {
                 Files.createDirectories(dir);
             }
-            Path dataFile = dir.resolve(md5 + ".dat");
-            Path mimeFile = dir.resolve(md5 + ".mime");
-            Path dataTmp = dir.resolve(md5 + ".dat.tmp");
-            Path mimeTmp = dir.resolve(md5 + ".mime.tmp");
             Files.write(dataTmp, data);
             Files.writeString(mimeTmp, mime, StandardCharsets.UTF_8);
-            Files.move(dataTmp, dataFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            Files.move(mimeTmp, mimeFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            moveReplace(dataTmp, dataFile);
+            moveReplace(mimeTmp, mimeFile);
+            if (log.isInfoEnabled()) {
+                log.info("[ImageCache] 已写入 md5={} bytes={} mime={} path={}",
+                        md5, data.length, mime, dataFile.toAbsolutePath());
+            }
+            return true;
         } catch (Exception e) {
-            log.warn("[ImageCache] 写缓存失败 md5={}（不影响本次请求）", md5, e);
+            // 用 error 级别 + 完整 stack，方便排查权限 / 跨文件系统 / 磁盘满等问题
+            log.error("[ImageCache] 写缓存失败 md5={} dir={}（本次请求仍可用）",
+                    md5, dir.toAbsolutePath(), e);
+            // 清掉残留 .tmp，免得目录里全是垃圾
+            safeDelete(dataTmp);
+            safeDelete(mimeTmp);
+            return false;
+        }
+    }
+
+    /**
+     * 优先原子重命名；底层文件系统（如 Docker overlayfs + bind mount / NFS）不支持时，
+     * 降级为普通 move + REPLACE。
+     */
+    private void moveReplace(Path src, Path dst) throws IOException {
+        try {
+            Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException ame) {
+            Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private void safeDelete(Path p) {
+        try {
+            Files.deleteIfExists(p);
+        } catch (Exception ignore) {
         }
     }
 
@@ -248,8 +283,16 @@ public class RemoteImageFetcher {
          */
         private long costMs;
         /**
-         * 是否命中本地缓存。true = 直接读盘；false = 走 HTTP 下载并刚写入缓存
+         * 是否命中本地缓存：true = 直接读盘；false = 走 HTTP 下载
          */
         private boolean fromCache;
+        /**
+         * 本次结束时缓存是否就绪。
+         * <ul>
+         *   <li>fromCache=true → 必然 true</li>
+         *   <li>fromCache=false → true 表示刚下载并已成功写盘，false 表示写盘失败（仅本次内存可用）</li>
+         * </ul>
+         */
+        private boolean cached;
     }
 }

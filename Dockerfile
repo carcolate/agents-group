@@ -16,11 +16,11 @@ ENV LLM_BASE_URL=http://localhost:11434/v1
 ENV LLM_API_KEY=sk-placeholder
 ENV LLM_AVAILABLE_MODELS=default-model
 
-# 历史消息图片本地缓存目录：以 URL 的 MD5 作为文件名（{md5}.dat + {md5}.mime）
-# 应用启动时会自动 mkdirs。声明 VOLUME 后宿主机可挂载，避免容器重启缓存失效。
-ENV COPILOT_IMAGE_CACHE_DIR=/var/cache/copilot-images
+# 历史消息图片本地缓存目录：app.jar 同级的 cache 目录，以 URL 的 MD5 作为文件名（{md5}.dat + {md5}.mime）
+# 应用启动时会自动 mkdirs；声明 VOLUME 后宿主机可挂载，避免容器重启缓存失效。
+ENV COPILOT_IMAGE_CACHE_DIR=/app/cache
 RUN mkdir -p ${COPILOT_IMAGE_CACHE_DIR}
-VOLUME ["/var/cache/copilot-images"]
+VOLUME ["/app/cache"]
 
 EXPOSE 7893
 
