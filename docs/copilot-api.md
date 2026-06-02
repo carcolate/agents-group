@@ -315,6 +315,10 @@ POST /copilot/chat/cancel?uuid={uuid}
 - **大小上限**：默认 5MB（`copilot.image.max-bytes`），超限直接判失败。
 - **MIME 白名单**：默认 `image/png,image/jpeg,image/webp,image/gif`（`copilot.image.allowed-mime`）。MIME 解析顺序：响应头 `Content-Type` → URL 后缀 → 默认 `image/jpeg`。
 - **下载超时**：默认 10s（`copilot.image.timeout-seconds`）。每张图独立计时，单张失败不影响其他图和主流程。
+- **本地缓存**：所有下载成功的图片以 URL 的 MD5 为文件名缓存在 `copilot.image.cache-dir` 目录下，每张图落两个文件：`{md5}.dat`（二进制）+ `{md5}.mime`（MIME 类型）。下次同 URL 请求**先查盘命中即跳过 HTTP 下载**，对应 `IMAGE_FETCH` 步骤文案为「缓存命中」，未命中则为「下载成功」。
+  - 默认路径：`${java.io.tmpdir}/copilot-images`
+  - Docker 部署：`Dockerfile` 已通过 `ENV COPILOT_IMAGE_CACHE_DIR=/var/cache/copilot-images` 覆盖，并声明 `VOLUME` 便于宿主机挂载，避免容器重启缓存失效
+  - 缓存写入采用 `.tmp + ATOMIC_MOVE` 防止半成品被误命中；读取异常时自动回退到 HTTP 下载
 - **失败兜底**：下载失败时不注入多模态 UserMessage，但 system prompt 文本里仍保留「已附图：{url}」占位，并产出一条 `IMAGE_FETCH` 失败步骤。
 - **模型要求**：含图请求必须用多模态模型（如 `doubao-seed-2.0-lite/pro`、`gpt-4o` 系列）。`deepseek-chat` 等纯文本模型收到 image 参数会被上游网关拒绝，触发 `ERROR` 步骤并 `markFailed`。
 - **快照体积**：base64 图片只入 LLM 请求 messages，不写入 Redis 的 TaskSnapshot；`IMAGE_FETCH` 步骤里只记录 URL + 元数据。

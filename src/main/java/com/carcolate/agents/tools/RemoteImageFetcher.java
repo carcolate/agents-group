@@ -1,5 +1,6 @@
 package com.carcolate.agents.tools;
 
+import jakarta.annotation.PostConstruct;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,12 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
@@ -43,11 +50,53 @@ public class RemoteImageFetcher {
     @Value("${copilot.image.allowed-mime:image/png,image/jpeg,image/webp,image/gif}")
     private List<String> allowedMime;
 
+    /**
+     * 本地文件缓存目录。命中后跳过 HTTP 下载，直接读盘。
+     * 默认走 JVM 系统 temp 子目录；Docker 部署可在 Dockerfile 中通过 ENV 覆盖到挂载盘。
+     */
+    @Value("${copilot.image.cache-dir:#{systemProperties['java.io.tmpdir']}/copilot-images}")
+    private String cacheDir;
+
+    @PostConstruct
+    public void initCacheDir() {
+        try {
+            Path dir = Paths.get(cacheDir);
+            if (!Files.exists(dir)) {
+                Files.createDirectories(dir);
+            }
+            log.info("[ImageCache] 缓存目录就绪 dir={}", dir.toAbsolutePath());
+        } catch (Exception e) {
+            log.warn("[ImageCache] 缓存目录创建失败 dir={}，将降级为每次都下载", cacheDir, e);
+        }
+    }
+
     public FetchedImage fetch(String url) throws IOException {
         if (url == null || url.isBlank()) {
             throw new IOException("图片 URL 为空");
         }
         long startMs = System.currentTimeMillis();
+
+        // 1) 先查本地缓存：{md5}.dat + {md5}.mime 同时存在即命中
+        String md5 = md5Hex(url);
+        Path dataFile = Paths.get(cacheDir, md5 + ".dat");
+        Path mimeFile = Paths.get(cacheDir, md5 + ".mime");
+        if (Files.isRegularFile(dataFile) && Files.isRegularFile(mimeFile)) {
+            try {
+                byte[] data = Files.readAllBytes(dataFile);
+                String mime = Files.readString(mimeFile, StandardCharsets.UTF_8).trim();
+                if (data.length > 0 && !mime.isBlank() && isAllowed(mime)) {
+                    String base64 = Base64.getEncoder().encodeToString(data);
+                    long cost = System.currentTimeMillis() - startMs;
+                    return new FetchedImage(base64, mime, data.length, cost, true);
+                }
+                log.warn("[ImageCache] 缓存文件不可用，回退下载 md5={} mime={} bytes={}",
+                        md5, mime, data.length);
+            } catch (Exception e) {
+                log.warn("[ImageCache] 读取缓存失败，回退下载 md5={}", md5, e);
+            }
+        }
+
+        // 2) 未命中：HTTP 下载
         int timeoutMs = (int) Math.min((long) timeoutSeconds * 1000, Integer.MAX_VALUE);
         RequestConfig cfg = RequestConfig.custom()
                 .setConnectTimeout(timeoutMs)
@@ -70,9 +119,47 @@ public class RemoteImageFetcher {
             if (!isAllowed(mime)) {
                 throw new IOException("MIME 不在白名单: " + mime);
             }
+            // 3) 写入本地缓存（先 .tmp 再 rename，避免半成品被命中）
+            writeCache(md5, data, mime);
             String base64 = Base64.getEncoder().encodeToString(data);
             long cost = System.currentTimeMillis() - startMs;
-            return new FetchedImage(base64, mime, data.length, cost);
+            return new FetchedImage(base64, mime, data.length, cost, false);
+        }
+    }
+
+    /**
+     * 计算 URL 的 MD5（hex 小写）。失败时回退用 URL 的 hashCode 兜底，保证总能算出文件名。
+     */
+    private String md5Hex(String url) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(url.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "fallback_" + Integer.toHexString(url.hashCode());
+        }
+    }
+
+    private void writeCache(String md5, byte[] data, String mime) {
+        try {
+            Path dir = Paths.get(cacheDir);
+            if (!Files.exists(dir)) {
+                Files.createDirectories(dir);
+            }
+            Path dataFile = dir.resolve(md5 + ".dat");
+            Path mimeFile = dir.resolve(md5 + ".mime");
+            Path dataTmp = dir.resolve(md5 + ".dat.tmp");
+            Path mimeTmp = dir.resolve(md5 + ".mime.tmp");
+            Files.write(dataTmp, data);
+            Files.writeString(mimeTmp, mime, StandardCharsets.UTF_8);
+            Files.move(dataTmp, dataFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            Files.move(mimeTmp, mimeFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (Exception e) {
+            log.warn("[ImageCache] 写缓存失败 md5={}（不影响本次请求）", md5, e);
         }
     }
 
@@ -157,8 +244,12 @@ public class RemoteImageFetcher {
          */
         private int bytes;
         /**
-         * 下载总耗时（毫秒）
+         * 总耗时（毫秒）：命中缓存仅含读盘耗时，未命中包含网络下载 + 写盘耗时
          */
         private long costMs;
+        /**
+         * 是否命中本地缓存。true = 直接读盘；false = 走 HTTP 下载并刚写入缓存
+         */
+        private boolean fromCache;
     }
 }
