@@ -21,6 +21,7 @@ public class CodeMsg {
     public static CodeMsg DELETE_ERROR = new CodeMsg(500, "删除失败");
     public static CodeMsg AGENT_NOT_FOUND = new CodeMsg(600, "Agent不存在或已禁用");
     public static CodeMsg TASK_NOT_FOUND = new CodeMsg(601, "任务不存在或已过期");
+    public static CodeMsg TASK_ALREADY_FINISHED = new CodeMsg(602, "任务已结束，无需中断");
     public static CodeMsg LLM_ERROR = new CodeMsg(700, "大模型调用异常");
 
     public static CodeMsg BREAK(String msg, Object... args) {

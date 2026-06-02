@@ -28,9 +28,9 @@
             <textarea id="p_summary" rows="4" placeholder="可选，例如：客户前几日咨询过价格，倾向 30 万左右..."></textarea>
         </div>
         <div class="form-row">
-            <label>近期历史消息（每行一条，格式：角色|时间|内容）</label>
-            <textarea id="p_history" rows="6" placeholder="客户|2026-05-19 11:30:00|你好&#10;客服|2026-05-19 11:30:05|您好，请问有什么可以帮您"></textarea>
-            <p class="desc">格式：<code>角色|yyyy-MM-dd HH:mm:ss|内容</code>，时间和内容里的竖线请用别的字符替代。</p>
+            <label>近期历史消息（每行一条，格式：角色|时间|内容|图片URL，后两段可选）</label>
+            <textarea id="p_history" rows="6" placeholder="客户|2026-05-19 11:30:00|你好&#10;客户|2026-05-19 11:30:30||https://x.com/car.jpg&#10;客户|2026-05-19 11:30:40|就这辆|https://x.com/car2.jpg&#10;客服|2026-05-19 11:31:00|收到，正在查看"></textarea>
+            <p class="desc">格式：<code>角色|yyyy-MM-dd HH:mm:ss|内容|图片URL</code>。第 4 段为可选图片 URL，纯图消息时把第 3 段「内容」留空（保留竖线）。后端会下载图片并送入多模态模型，请使用 doubao / gpt-4o 等多模态模型。</p>
         </div>
         <div class="form-row">
             <label>客户当前消息</label>
@@ -38,6 +38,7 @@
         </div>
         <div class="form-row">
             <button class="primary block" onclick="sendChat()">发送</button>
+            <button id="p_cancel_btn" class="block" style="margin-top:8px;background:#bdc3c7;color:#fff;display:none;" onclick="cancelChat()">中断当前任务</button>
         </div>
         <p class="desc" id="p_status"></p>
     </section>

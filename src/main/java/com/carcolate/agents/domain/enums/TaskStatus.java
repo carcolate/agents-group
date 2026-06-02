@@ -10,7 +10,8 @@ public enum TaskStatus implements EnumInterface<String> {
 
     RUNNING("RUNNING"),
     SUCCESS("SUCCESS"),
-    FAILED("FAILED");
+    FAILED("FAILED"),
+    CANCELLED("CANCELLED");
 
     private final String value;
 

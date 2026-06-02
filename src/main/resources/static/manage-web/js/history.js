@@ -41,6 +41,8 @@ async function loadList() {
 function statusBadge(s) {
     if (s === 'SUCCESS') return '<span class="tag tag-on">SUCCESS</span>';
     if (s === 'FAILED') return '<span class="tag tag-off">FAILED</span>';
+    if (s === 'CANCELLED') return '<span class="tag" style="background:#bdc3c7;color:#fff;">CANCELLED</span>';
+    if (s === 'RUNNING') return '<span class="tag" style="background:#3498db;color:#fff;">RUNNING</span>';
     return '<span class="tag">' + escapeHtml(s || '-') + '</span>';
 }
 

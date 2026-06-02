@@ -76,4 +76,38 @@ public class CopilotServiceImpl implements CopilotService {
         }
         return JSON.parseObject(JSON.toJSONString(o), TaskSnapshot.class);
     }
+
+    @Override
+    public CancelResult cancel(String uuid) {
+        if (uuid == null || uuid.isBlank()) {
+            return CancelResult.NOT_FOUND;
+        }
+        TaskSnapshot snap = get(uuid);
+        if (snap == null) {
+            return CancelResult.NOT_FOUND;
+        }
+        String st = snap.getStatus();
+        if (!TaskStatus.RUNNING.getCode().equals(st)) {
+            // SUCCESS / FAILED / CANCELLED 都视为已结束
+            return CancelResult.ALREADY_FINISHED;
+        }
+        // 1) 写中断标记：runner 在下一轮 ReAct 顶端检测后退出
+        redisTemplate.opsForValue().set(
+                RedisKeys.copilotCancel(uuid),
+                "1",
+                ttlSeconds,
+                TimeUnit.SECONDS
+        );
+        // 2) 立即在 snapshot 上落一条"中断请求"步骤，前端轮询能马上看到反馈
+        snap.getSteps().add(StepRecord.of(StepType.ERROR.getCode(),
+                "已收到中断请求，等待 ReAct 当前轮结束后退出"));
+        redisTemplate.opsForValue().set(
+                RedisKeys.copilotTask(uuid),
+                snap,
+                ttlSeconds,
+                TimeUnit.SECONDS
+        );
+        log.info("[Copilot] uuid={} 中断请求已写入", uuid);
+        return CancelResult.REQUESTED;
+    }
 }

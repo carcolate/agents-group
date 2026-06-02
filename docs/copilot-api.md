@@ -10,6 +10,7 @@
 |---|------|------|------|
 | 1 | `POST` | `/copilot/chat` | 提交对话任务，返回 task uuid |
 | 2 | `GET` | `/copilot/chat/result` | 按 uuid 查询任务执行轨迹与状态 |
+| 3 | `POST` | `/copilot/chat/cancel` | 中断指定 uuid 的任务 |
 
 ---
 
@@ -34,10 +35,12 @@ Content-Type: application/json
 ```json
 {
   "agentId": 1,
-  "currentMessage": "极石汽车多少钱？",
+  "currentMessage": "这辆车多少钱？",
   "historyMessages": [
-    { "role": "客户", "content": "你好", "time": "2026-05-19 11:30:00" },
-    { "role": "客服", "content": "您好，请问有什么可以帮您", "time": "2026-05-19 11:30:05" }
+    { "role": "客户", "content": "你好",                "time": "2026-05-19 11:30:00" },
+    { "role": "客户", "image":   "https://x.com/car.jpg",  "time": "2026-05-19 11:30:30" },
+    { "role": "客户", "content": "就这辆", "image": "https://x.com/car2.jpg", "time": "2026-05-19 11:30:40" },
+    { "role": "客服", "content": "您好，请问有什么可以帮您", "time": "2026-05-19 11:31:00" }
   ],
   "historySummary": "客户前几日咨询过价格，倾向 30 万左右"
 }
@@ -140,7 +143,59 @@ GET /copilot/chat/result?uuid={uuid}
 
 ---
 
-## 3. 数据模型
+## 3. 中断任务
+
+```
+POST /copilot/chat/cancel?uuid={uuid}
+```
+
+向 Redis 写入中断标记，并立即在 snapshot 上追加一条「已收到中断请求」步骤。
+真正终止由后台 ReAct 编排循环在**下一轮顶端**检测后执行：将 status 置为 `CANCELLED`、`finishedAt` 写当前时间、`errorMsg` 写中断原因，并落 `tb_copilot_history`。
+
+> 实际生效时间 = 当前 LLM 调用剩余耗时。当前轮的 HTTP 调用无法被强行打断，必须等本轮结束。
+
+### 查询参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `uuid` | `String` | 是 | 提交任务时返回的唯一标识 |
+
+### 成功响应 (code=0)
+
+```json
+{
+  "code": 0,
+  "msg": null,
+  "data": {
+    "uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "result": "REQUESTED"
+  }
+}
+```
+
+`result` 取值：
+
+| 取值 | 说明 |
+|------|------|
+| `REQUESTED` | 已写入中断标记，runner 将在下一轮 ReAct 顶端退出 |
+
+### 错误响应
+
+| code | msg | 说明 |
+|------|-----|------|
+| `601` | 任务不存在或已过期 | uuid 无效或 Redis 中已过期清除 |
+| `602` | 任务已结束，无需中断 | 当前 status 已是 `SUCCESS` / `FAILED` / `CANCELLED` |
+
+### 推荐前端流程
+
+1. 提交 `/copilot/chat` 后，UI 显示「中断」按钮
+2. 用户点击 → `POST /copilot/chat/cancel?uuid=xxx`
+3. 继续轮询 `/copilot/chat/result`，直到 status 变为 `CANCELLED`
+4. 收到 `CANCELLED` 后隐藏「中断」按钮
+
+---
+
+## 4. 数据模型
 
 ### 统一响应 (Rsp\<T\>)
 
@@ -168,11 +223,14 @@ GET /copilot/chat/result?uuid={uuid}
 
 ### 历史消息 (HistoryMessage)
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `role` | `String` | 角色，例如：客户 / 客服 / system |
-| `content` | `String` | 消息正文 |
-| `time` | `String` | 消息时间，格式：`yyyy-MM-dd HH:mm:ss` |
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `role` | `String` | 是 | 角色，例如：客户 / 客服 / system |
+| `content` | `String` | 否 | 消息正文。允许为空（纯图消息时只填 `image` 即可） |
+| `image` | `String` | 否 | 单张图片 URL。后端会异步下载并以 `base64 + mimeType` 形式作为独立多模态 `UserMessage` 送入 LLM；下载失败不阻塞主流程，仅在 system prompt 文本里以「已附图：{url}」占位标注 |
+| `time` | `String` | 否 | 消息时间，格式：`yyyy-MM-dd HH:mm:ss`，会被拼接为 `yyyy-MM-dd HH:mm:ss 周X` 注入 prompt |
+
+> `content` 与 `image` 至少一个有值；二者都空的条目会被服务端跳过。
 
 ### 步骤记录 (StepRecord)
 
@@ -192,6 +250,8 @@ GET /copilot/chat/result?uuid={uuid}
 | `LLM_THINK` | 大模型推理过程（思考链） | 紫色 |
 | `TOOL_CALL` | 工具调用（如 RAG 搜索） | 橙色 |
 | `TOOL_RESULT` | 工具返回结果 | 黄色 |
+| `IMAGE_FETCH` | 历史图片下载日志（成功 / 失败都会落一条，content 含 URL、MIME、字节数、耗时或错误原因） | 青色 |
+| `STYLE_REWRITE` | 风格润色（agent.stylePrompt 非空时对草稿做的二次改写） | 绿松石 |
 | `FINAL_REPLY` | 最终回复给用户的内容 | 绿色 |
 | `ERROR` | 执行过程中发生的错误 | 红色 |
 
@@ -202,10 +262,11 @@ GET /copilot/chat/result?uuid={uuid}
 | `RUNNING` | 任务正在执行中，ReAct 循环尚未结束 |
 | `SUCCESS` | 任务执行成功，已产出最终回复 |
 | `FAILED` | 任务执行失败，可查看 errorMsg |
+| `CANCELLED` | 用户主动中断（通过 `POST /copilot/chat/cancel`），errorMsg 记录中断时所处轮次 |
 
 ---
 
-## 4. 工作流程
+## 5. 工作流程
 
 ```
 ┌──────────┐         POST /copilot/chat          ┌──────────────┐
@@ -231,7 +292,7 @@ GET /copilot/chat/result?uuid={uuid}
 
 ---
 
-## 5. 错误码汇总
+## 6. 错误码汇总
 
 | code | msg | 触发场景 |
 |------|-----|----------|
@@ -240,7 +301,20 @@ GET /copilot/chat/result?uuid={uuid}
 | `500` | 服务器状态不佳，请稍后再试 | 通用服务端错误 |
 | `600` | Agent不存在或已禁用 | agentId 无效 |
 | `601` | 任务不存在或已过期 | uuid 无效或任务已过期 |
+| `602` | 任务已结束，无需中断 | cancel 接口针对已是 SUCCESS / FAILED / CANCELLED 的任务调用 |
 | `700` | 大模型调用异常 | LLM 调用失败 |
 | `500004` | 业务异常：{详情} | 运行时业务异常 |
 | `500201` | 数据不存在 | 查询的数据不存在 |
 | `500203` | {自定义消息} | 业务中断（如工具调用失败） |
+
+---
+
+## 7. 注意事项 - 历史图片 (image)
+
+- **图片必须外网可达**：服务端会通过 HTTP GET 拉取，不支持鉴权 URL。
+- **大小上限**：默认 5MB（`copilot.image.max-bytes`），超限直接判失败。
+- **MIME 白名单**：默认 `image/png,image/jpeg,image/webp,image/gif`（`copilot.image.allowed-mime`）。MIME 解析顺序：响应头 `Content-Type` → URL 后缀 → 默认 `image/jpeg`。
+- **下载超时**：默认 10s（`copilot.image.timeout-seconds`）。每张图独立计时，单张失败不影响其他图和主流程。
+- **失败兜底**：下载失败时不注入多模态 UserMessage，但 system prompt 文本里仍保留「已附图：{url}」占位，并产出一条 `IMAGE_FETCH` 失败步骤。
+- **模型要求**：含图请求必须用多模态模型（如 `doubao-seed-2.0-lite/pro`、`gpt-4o` 系列）。`deepseek-chat` 等纯文本模型收到 image 参数会被上游网关拒绝，触发 `ERROR` 步骤并 `markFailed`。
+- **快照体积**：base64 图片只入 LLM 请求 messages，不写入 Redis 的 TaskSnapshot；`IMAGE_FETCH` 步骤里只记录 URL + 元数据。

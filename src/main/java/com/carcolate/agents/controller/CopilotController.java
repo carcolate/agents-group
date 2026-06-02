@@ -55,10 +55,12 @@ public class CopilotController {
      *
      * {
      *   "agentId": 1,
-     *   "currentMessage": "极石汽车多少钱？",
+     *   "currentMessage": "这辆车多少钱？",
      *   "historyMessages": [
-     *     { "role": "客户", "content": "你好",                 "time": "2026-05-19 11:30:00" },
-     *     { "role": "客服", "content": "您好，请问有什么可以帮您", "time": "2026-05-19 11:30:05" }
+     *     { "role": "客户", "content": "你好",                            "time": "2026-05-19 11:30:00" },
+     *     { "role": "客户", "image":   "https://x.com/car.jpg",              "time": "2026-05-19 11:30:30" },
+     *     { "role": "客户", "content": "就这辆", "image": "https://x.com/car2.jpg", "time": "2026-05-19 11:30:40" },
+     *     { "role": "客服", "content": "您好，请问有什么可以帮您",          "time": "2026-05-19 11:31:00" }
      *   ],
      *   "historySummary": "客户前几日咨询过价格，倾向 30 万左右"
      * }
@@ -187,5 +189,52 @@ public class CopilotController {
             return Rsp.error(CodeMsg.TASK_NOT_FOUND);
         }
         return Rsp.success(snap);
+    }
+
+    /**
+     * 中断指定任务。
+     *
+     * <p>仅向 Redis 写入中断标记，并立即在 snapshot 上追加一条「已收到中断请求」步骤；
+     * 真正终止由后台 ReAct 编排循环在下一轮顶端检测后执行（status -> CANCELLED 并落库）。
+     * 因此实际生效时间 = 当前 LLM 调用剩余耗时。</p>
+     *
+     * <p><b>请求示例：</b></p>
+     * <pre>{@code
+     * POST /copilot/chat/cancel?uuid=a1b2c3d4-e5f6-7890-abcd-ef1234567890
+     * }</pre>
+     *
+     * <p><b>成功响应：</b></p>
+     * <pre>{@code
+     * // 已发出中断信号（runner 会在下一轮顶端退出）
+     * { "code": 0, "msg": null, "data": { "uuid": "...", "result": "REQUESTED" } }
+     * }</pre>
+     *
+     * <p><b>错误响应：</b></p>
+     * <pre>{@code
+     * // 任务不存在或已过期
+     * { "code": 601, "msg": "任务不存在或已过期", "data": null }
+     *
+     * // 任务已结束（SUCCESS/FAILED/CANCELLED），无需中断
+     * { "code": 602, "msg": "任务已结束，无需中断", "data": null }
+     * }</pre>
+     *
+     * @param uuid 任务唯一标识（必填）
+     * @return 中断结果
+     */
+    @PostMapping("chat/cancel")
+    public Rsp<Map<String, String>> cancel(@RequestParam("uuid") String uuid) {
+        CopilotService.CancelResult r = copilotService.cancel(uuid);
+        switch (r) {
+            case NOT_FOUND:
+                return Rsp.error(CodeMsg.TASK_NOT_FOUND);
+            case ALREADY_FINISHED:
+                return Rsp.error(CodeMsg.TASK_ALREADY_FINISHED);
+            case REQUESTED:
+            default:
+                Map<String, String> data = new HashMap<>();
+                data.put("uuid", uuid);
+                data.put("result", r.name());
+                return Rsp.success(data);
+        }
     }
 }

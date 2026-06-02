@@ -14,10 +14,14 @@ import com.carcolate.agents.dto.TaskSnapshot;
 import com.carcolate.agents.response.utils.RedisKeys;
 import com.carcolate.agents.tools.RagFetchTool;
 import com.carcolate.agents.tools.RagSearchTool;
+import com.carcolate.agents.tools.RemoteImageFetcher;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
@@ -62,6 +66,9 @@ public class CopilotRunner {
 
     @Autowired
     private CopilotHistoryService copilotHistoryService;
+
+    @Autowired
+    private RemoteImageFetcher remoteImageFetcher;
 
     @Value("${copilot.task.ttl-seconds:86400}")
     private long ttlSeconds;
@@ -118,6 +125,8 @@ public class CopilotRunner {
         }
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(SystemMessage.from(systemPrompt));
+        // 把含图的历史消息逐条下载，注入为独立的多模态 UserMessage
+        appendHistoryImageMessages(uuid, req, messages);
         messages.add(UserMessage.from(req.getCurrentMessage()));
 
         // 按 Agent 配置动态构建 ChatModel，未设置时回退到全局默认（available-models 第一项）
@@ -126,6 +135,12 @@ public class CopilotRunner {
 
         int maxSteps = agent.getMaxSteps() == null || agent.getMaxSteps() <= 0 ? 6 : agent.getMaxSteps();
         for (int i = 0; i < maxSteps; i++) {
+            // 每轮开始前优先检查中断标记：当前轮 LLM 调用无法被强行打断，最坏会等当前轮结束再退出
+            if (isCancelled(uuid)) {
+                markCancelled(uuid, "用户主动中断（已运行 " + i + " 轮）",
+                        req, actualModel, llmRoundRef[0], startMs);
+                return;
+            }
             llmRoundRef[0] = i + 1;
             ChatRequest chatRequest = ChatRequest.builder()
                     .messages(messages)
@@ -224,6 +239,51 @@ public class CopilotRunner {
         }
     }
 
+    /**
+     * 遍历 historyMessages，对每条含 image 的记录单独下载图片并注入为多模态 UserMessage。
+     * <ul>
+     *   <li>下载成功：追加一条 {@code UserMessage(TextContent + ImageContent)}，并记录 IMAGE_FETCH 成功步骤。</li>
+     *   <li>下载失败：不注入 UserMessage（system prompt 文本里已有「已附图：{url}」占位），只记录 IMAGE_FETCH 失败步骤。</li>
+     * </ul>
+     * 单张图失败不影响其他图，更不阻塞 ReAct 主流程。
+     */
+    private void appendHistoryImageMessages(String uuid, CopilotRequest req, List<ChatMessage> messages) {
+        if (req == null || req.getHistoryMessages() == null || req.getHistoryMessages().isEmpty()) {
+            return;
+        }
+        for (HistoryMessage m : req.getHistoryMessages()) {
+            if (m == null) continue;
+            String url = m.getImage();
+            if (url == null || url.isBlank()) continue;
+
+            String role = m.getRole() == null || m.getRole().isBlank() ? "未知角色" : m.getRole();
+            String content = m.getContent() == null ? "" : m.getContent();
+            String timeLabel = formatTimeWithWeek(m.getTime());
+            String prefix = "[历史"
+                    + (timeLabel.isEmpty() ? "" : " " + timeLabel)
+                    + " " + role + "] "
+                    + (content.isBlank() ? "（图片）" : content);
+
+            try {
+                RemoteImageFetcher.FetchedImage img = remoteImageFetcher.fetch(url);
+                Image image = Image.builder()
+                        .base64Data(img.getBase64())
+                        .mimeType(img.getMimeType())
+                        .build();
+                messages.add(UserMessage.from(TextContent.from(prefix), ImageContent.from(image)));
+                appendStep(uuid, StepRecord.of(StepType.IMAGE_FETCH.getCode(),
+                        "下载成功 url=" + url
+                                + " mime=" + img.getMimeType()
+                                + " bytes=" + img.getBytes()
+                                + " cost=" + img.getCostMs() + "ms"));
+            } catch (Exception e) {
+                log.warn("[Copilot] uuid={} 历史图片下载失败 url={}", uuid, url, e);
+                appendStep(uuid, StepRecord.of(StepType.IMAGE_FETCH.getCode(),
+                        "下载失败 url=" + url + " 原因=" + e.getMessage()));
+            }
+        }
+    }
+
     private static final DateTimeFormatter HISTORY_TIME_FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String[] CN_WEEK = {"周一", "周二", "周三", "周四", "周五", "周六", "周日"};
@@ -284,10 +344,18 @@ public class CopilotRunner {
                 if (m == null) continue;
                 String role = m.getRole() == null || m.getRole().isBlank() ? "未知角色" : m.getRole();
                 String content = m.getContent() == null ? "" : m.getContent();
+                String image = m.getImage();
+                if (content.isBlank() && (image == null || image.isBlank())) {
+                    continue;
+                }
                 String timeLabel = formatTimeWithWeek(m.getTime());
                 sb.append("- ");
                 if (!timeLabel.isEmpty()) sb.append("[").append(timeLabel).append("] ");
-                sb.append(role).append(": ").append(content).append("\n");
+                sb.append(role).append(": ").append(content);
+                if (image != null && !image.isBlank()) {
+                    sb.append("（已附图：").append(image).append("）");
+                }
+                sb.append("\n");
             }
         }
         sb.append("\n\n## 工具调用规则\n");
@@ -390,6 +458,35 @@ public class CopilotRunner {
         snap.setFinishedAt(Instant.now());
         save(snap);
         persistHistory(snap, req, actualModel, llmRound, startMs);
+    }
+
+    private void markCancelled(String uuid, String reason, CopilotRequest req, String actualModel,
+                               int llmRound, long startMs) {
+        TaskSnapshot snap = load(uuid);
+        if (snap == null) return;
+        snap.getSteps().add(StepRecord.of(StepType.ERROR.getCode(), "任务被中断：" + reason));
+        snap.setStatus(TaskStatus.CANCELLED.getCode());
+        snap.setErrorMsg(reason);
+        snap.setFinishedAt(Instant.now());
+        save(snap);
+        // 清理 cancel 标记，避免后续误判（key 自身有 TTL，也可以不删；这里显式删除更干净）
+        try {
+            redisTemplate.delete(RedisKeys.copilotCancel(uuid));
+        } catch (Exception ignore) {
+        }
+        persistHistory(snap, req, actualModel, llmRound, startMs);
+    }
+
+    /**
+     * 检查 Redis 中是否有该任务的中断标记。
+     */
+    private boolean isCancelled(String uuid) {
+        try {
+            Boolean has = redisTemplate.hasKey(RedisKeys.copilotCancel(uuid));
+            return Boolean.TRUE.equals(has);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private void persistHistory(TaskSnapshot snap, CopilotRequest req, String actualModel,

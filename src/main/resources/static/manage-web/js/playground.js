@@ -1,4 +1,5 @@
 let pollTimer = null;
+let currentUuid = null;
 
 window.addEventListener('DOMContentLoaded', loadAgents);
 
@@ -41,9 +42,26 @@ async function sendChat() {
         return;
     }
     const uuid = rsp.data.uuid;
+    currentUuid = uuid;
     document.getElementById('p_uuid').textContent = uuid;
     document.getElementById('p_status').textContent = '任务运行中...';
+    document.getElementById('p_cancel_btn').style.display = '';
     startPolling(uuid);
+}
+
+async function cancelChat() {
+    if (!currentUuid) return;
+    const btn = document.getElementById('p_cancel_btn');
+    btn.disabled = true;
+    btn.textContent = '正在中断…';
+    const rsp = await API.post('/copilot/chat/cancel', null, { uuid: currentUuid });
+    btn.disabled = false;
+    btn.textContent = '中断当前任务';
+    if (rsp.code !== 0) {
+        toast(rsp.msg || '中断失败', true);
+        return;
+    }
+    toast('已发出中断请求，等待当前轮 LLM 调用结束');
 }
 
 function startPolling(uuid) {
@@ -54,11 +72,12 @@ function startPolling(uuid) {
         if (rsp.code !== 0) return;
         const snap = rsp.data;
         renderSteps(snap);
-        if (snap.status === 'SUCCESS' || snap.status === 'FAILED') {
+        if (snap.status === 'SUCCESS' || snap.status === 'FAILED' || snap.status === 'CANCELLED') {
             if (stoppedAt == null) stoppedAt = Date.now();
             if (Date.now() - stoppedAt > 800) {
                 clearInterval(pollTimer);
                 pollTimer = null;
+                document.getElementById('p_cancel_btn').style.display = 'none';
             }
         }
     }, 800);
@@ -97,11 +116,13 @@ function renderSteps(snap) {
 }
 
 /**
- * 把 textarea 文本按 "角色|时间|内容" 解析为 HistoryMessage 数组。
+ * 把 textarea 文本按 "角色|时间|内容|图片URL" 解析为 HistoryMessage 数组。
  * 宽松处理：
- *   - 一段（无竖线）→ role=未知，content=原文，time 留空
- *   - 两段           → role | content（time 留空）
- *   - 三段及以上     → role | time | content（第三段后允许内容里再带 "|"）
+ *   - 1 段（无竖线）→ role=未知，content=原文，time/image 留空
+ *   - 2 段           → role | content（time/image 留空）
+ *   - 3 段           → role | time | content（image 留空）
+ *   - 4 段及以上     → role | time | content | image（第 4 段后整体拼回 image，
+ *                       兼容 URL 里出现的 query string 等）
  */
 function parseHistoryMessages(text) {
     if (!text) return [];
@@ -111,15 +132,24 @@ function parseHistoryMessages(text) {
         .map(line => {
             const parts = line.split('|');
             if (parts.length === 1) {
-                return { role: '未知', content: parts[0].trim(), time: '' };
+                return { role: '未知', content: parts[0].trim(), time: '', image: '' };
             }
             if (parts.length === 2) {
-                return { role: parts[0].trim(), content: parts[1].trim(), time: '' };
+                return { role: parts[0].trim(), content: parts[1].trim(), time: '', image: '' };
+            }
+            if (parts.length === 3) {
+                return {
+                    role: parts[0].trim(),
+                    time: parts[1].trim(),
+                    content: parts[2].trim(),
+                    image: ''
+                };
             }
             return {
                 role: parts[0].trim(),
                 time: parts[1].trim(),
-                content: parts.slice(2).join('|').trim()
+                content: parts[2].trim(),
+                image: parts.slice(3).join('|').trim()
             };
         });
 }
