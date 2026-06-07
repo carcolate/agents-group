@@ -39,9 +39,8 @@ public class CopilotServiceImpl implements CopilotService {
 
     @Override
     public String submit(CopilotRequest request) {
-        if (request == null || request.getAgentId() == null
-                || request.getCurrentMessage() == null || request.getCurrentMessage().isBlank()) {
-            throw new IllegalArgumentException("agentId 与 currentMessage 必填");
+        if (request == null || request.getAgentId() == null) {
+            throw new IllegalArgumentException("agentId 必填");
         }
         Agent agent = agentService.getById(request.getAgentId());
         if (agent == null || agent.getStatus() == null || agent.getStatus() != 1) {

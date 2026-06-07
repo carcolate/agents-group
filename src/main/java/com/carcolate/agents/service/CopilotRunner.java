@@ -127,7 +127,10 @@ public class CopilotRunner {
         messages.add(SystemMessage.from(systemPrompt));
         // 把含图的历史消息逐条下载，注入为独立的多模态 UserMessage
         appendHistoryImageMessages(uuid, req, messages);
-        messages.add(UserMessage.from(req.getCurrentMessage()));
+        if (req.getCurrentMessage()!=null) {
+            messages.add(UserMessage.from(req.getCurrentMessage()));
+        }
+
 
         // 按 Agent 配置动态构建 ChatModel，未设置时回退到全局默认（available-models 第一项）
         Double agentTemp = agent.getTemperature() == null ? null : agent.getTemperature().doubleValue();
