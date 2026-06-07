@@ -101,6 +101,7 @@ public class CopilotController {
             data.put("uuid", uuid);
             return Rsp.success(data);
         } catch (IllegalArgumentException e) {
+            e.printStackTrace();
             return Rsp.error(CodeMsg.PARAM_ERROR);
         } catch (IllegalStateException e) {
             return Rsp.error(CodeMsg.AGENT_NOT_FOUND);
