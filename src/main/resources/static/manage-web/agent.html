@@ -71,6 +71,11 @@
                 <p class="desc">拖入 .md / .txt 文件快速填充</p>
             </div>
             <div class="form-row">
+                <label>回复格式约束</label>
+                <textarea id="f_response_format" rows="8" placeholder="约束 LLM 最终回复的格式，例如：&#10;1. 使用 Markdown 列表&#10;2. 关键参数用表格展示&#10;3. 末尾附一句引导问题&#10;会自动拼接到前置 Prompt 后，参与主 Agent 决策。"></textarea>
+                <p class="desc">拖入 .md / .txt 文件快速填充</p>
+            </div>
+            <div class="form-row">
                 <label>语言风格 Prompt</label>
                 <textarea id="f_style_prompt" rows="6" placeholder="语气风格要求，例如：使用亲切友好的语气回复，像朋友一样交流。&#10;最终回复时会用此 Prompt 对 AI 的回答做风格润色，不影响 Agent 的决策过程。"></textarea>
                 <p class="desc">拖入 .md / .txt 文件快速填充</p>

@@ -329,6 +329,10 @@ public class CopilotRunner {
     private String buildSystemPrompt(Agent agent, CopilotRequest req) {
         StringBuilder sb = new StringBuilder();
         sb.append(agent.getPrePrompt() == null ? "" : agent.getPrePrompt());
+        String responseFormat = agent.getResponseFormat();
+        if (responseFormat != null && !responseFormat.isBlank()) {
+            sb.append("\n\n## 回复格式约束\n").append(responseFormat);
+        }
         sb.append("\n\n## Agent 身份与使命\n").append(agent.getMission() == null ? "" : agent.getMission());
 
         // 拉一次启用状态文档，按 engageType 分两路使用：

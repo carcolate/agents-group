@@ -36,6 +36,12 @@ public class Agent implements Serializable {
     private String prePrompt;
 
     /**
+     * 回复格式约束：用于要求 LLM 最终输出的回复格式，
+     * 自动拼接到前置 Prompt 的后面，参与主 Agent 决策
+     */
+    private String responseFormat;
+
+    /**
      * 语言风格 Prompt：主 Agent 决策时不感知，
      * 仅在生成最终回复后用于风格润色，输出终稿
      */

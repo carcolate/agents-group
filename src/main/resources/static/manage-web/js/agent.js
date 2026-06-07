@@ -89,6 +89,7 @@ async function openEditor(id) {
     document.getElementById('f_name').value = '';
     document.getElementById('f_mission').value = '';
     document.getElementById('f_pre_prompt').value = '';
+    document.getElementById('f_response_format').value = '';
     document.getElementById('f_style_prompt').value = '';
     renderModelSelect();
     document.getElementById('f_model_name').value = '';
@@ -104,6 +105,7 @@ async function openEditor(id) {
         document.getElementById('f_name').value = a.name || '';
         document.getElementById('f_mission').value = a.mission || '';
         document.getElementById('f_pre_prompt').value = a.prePrompt || '';
+        document.getElementById('f_response_format').value = a.responseFormat || '';
         document.getElementById('f_style_prompt').value = a.stylePrompt || '';
         setModelSelectValue(a.modelName);
         document.getElementById('f_temperature').value = a.temperature == null ? '' : a.temperature;
@@ -128,6 +130,7 @@ async function submitForm() {
         name: document.getElementById('f_name').value.trim(),
         mission: document.getElementById('f_mission').value.trim(),
         prePrompt: document.getElementById('f_pre_prompt').value,
+        responseFormat: document.getElementById('f_response_format').value || null,
         stylePrompt: document.getElementById('f_style_prompt').value || null,
         modelName: (document.getElementById('f_model_name').value || '').trim() || null,
         temperature: document.getElementById('f_temperature').value === '' ? null : Number(document.getElementById('f_temperature').value),
@@ -159,7 +162,7 @@ async function delAgent(id) {
 }
 
 function initDragDrop() {
-    ['f_pre_prompt', 'f_style_prompt'].forEach(id => bindDragDrop(id));
+    ['f_pre_prompt', 'f_response_format', 'f_style_prompt'].forEach(id => bindDragDrop(id));
 }
 
 function bindDragDrop(id) {
