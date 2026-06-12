@@ -66,6 +66,11 @@
                 <input id="f_mission" placeholder="一句话定位" />
             </div>
             <div class="form-row">
+                <label>额外参数 Key</label>
+                <input id="f_other_param_keys" placeholder="例如：uuid,user.age（多个用英文逗号隔开）" />
+                <p class="desc">对应调用方 otherParams 传入的字段路径（支持点号嵌套）。配置后可在下方各 Prompt 中用 {{uuid}}、{{user.age}} 占位，运行时自动替换为实际值；未传值时替换为空。</p>
+            </div>
+            <div class="form-row">
                 <label>前置 Prompt *</label>
                 <textarea id="f_pre_prompt" rows="14" placeholder="# 角色 ...\n# 操作步骤 ...\n# 注意事项 ..."></textarea>
                 <p class="desc">拖入 .md / .txt 文件快速填充</p>

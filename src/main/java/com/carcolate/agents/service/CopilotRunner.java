@@ -40,6 +40,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -163,7 +164,7 @@ public class CopilotRunner {
             appendStep(uuid, StepRecord.ofThink(StepType.LLM_THINK.getCode(), thinkContent, reasoning));
 
             if (!hasToolCall) {
-                String finalReply = applyStylePolish(uuid, chatModel, agent, thinkText);
+                String finalReply = applyStylePolish(uuid, chatModel, agent, req, thinkText);
                 appendStep(uuid, StepRecord.of(StepType.FINAL_REPLY.getCode(), finalReply));
                 markDone(uuid, finalReply, req, actualModel, llmRoundRef[0], startMs);
                 return;
@@ -202,8 +203,8 @@ public class CopilotRunner {
      * - stylePrompt 为空：直接返回草稿，不调用 LLM。
      * - 润色调用失败：记录错误步骤，回退草稿，保证主流程可用。
      */
-    private String applyStylePolish(String uuid, ChatModel chatModel, Agent agent, String draftReply) {
-        String stylePrompt = agent.getStylePrompt();
+    private String applyStylePolish(String uuid, ChatModel chatModel, Agent agent, CopilotRequest req, String draftReply) {
+        String stylePrompt = renderPromptVars(agent.getStylePrompt(), agent, req);
         if (stylePrompt == null || stylePrompt.isBlank()) {
             return draftReply;
         }
@@ -220,8 +221,8 @@ public class CopilotRunner {
             msgs.add(SystemMessage.from(sys));
             msgs.add(UserMessage.from(usr));
 
-            ChatRequest req = ChatRequest.builder().messages(msgs).build();
-            ChatResponse resp = chatModel.chat(req);
+            ChatRequest polishReq = ChatRequest.builder().messages(msgs).build();
+            ChatResponse resp = chatModel.chat(polishReq);
             AiMessage polishAi = resp.aiMessage();
             String polished = polishAi == null ? null : polishAi.text();
             String polishThinking = safeThinking(polishAi);
@@ -331,8 +332,8 @@ public class CopilotRunner {
 
     private String buildSystemPrompt(Agent agent, CopilotRequest req) {
         StringBuilder sb = new StringBuilder();
-        sb.append(agent.getPrePrompt() == null ? "" : agent.getPrePrompt());
-        String responseFormat = agent.getResponseFormat();
+        sb.append(renderPromptVars(agent.getPrePrompt() == null ? "" : agent.getPrePrompt(), agent, req));
+        String responseFormat = renderPromptVars(agent.getResponseFormat(), agent, req);
         if (responseFormat != null && !responseFormat.isBlank()) {
             sb.append("\n\n## 回复格式约束\n").append(responseFormat);
         }
@@ -383,6 +384,64 @@ public class CopilotRunner {
         sb.append("- 严禁凭空捏造未在【前置知识库】或工具返回结果中出现的事实、参数、价格。\n");
         sb.append("- 不需要调用工具时，直接给出最终回复（输出客户实际看到的那句话即可，不要再附思考过程）。\n");
         return sb.toString();
+    }
+
+    /**
+     * 用 req.otherParams 渲染 Prompt 模板中的 {{key}} 动态变量。
+     * <ul>
+     *   <li>替换范围以 agent.otherParamKeys（逗号分隔）声明的 key 为准，未声明的占位符原样保留。</li>
+     *   <li>key 支持点号路径（如 user.age）：先按整键直查 otherParams，查不到再逐级下钻嵌套 Map。</li>
+     *   <li>声明了但请求未传值的 key，占位符替换为空字符串，避免把 {{xxx}} 漏给 LLM。</li>
+     * </ul>
+     */
+    private String renderPromptVars(String template, Agent agent, CopilotRequest req) {
+        if (template == null || template.isBlank()) {
+            return template;
+        }
+        String keysCfg = agent == null ? null : agent.getOtherParamKeys();
+        if (keysCfg == null || keysCfg.isBlank()) {
+            return template;
+        }
+        Map<String, Object> params = req == null ? null : req.getOtherParams();
+        String result = template;
+        for (String rawKey : keysCfg.split("[,，]")) {
+            String key = rawKey.trim();
+            if (key.isEmpty()) continue;
+            Object val = resolveParamValue(params, key);
+            result = result.replace("{{" + key + "}}", paramValueToString(val));
+        }
+        return result;
+    }
+
+    /**
+     * 按 key 从 otherParams 取值：整键直查优先（兼容客户端直接传扁平 key "user.age"），
+     * 未命中再按点号逐级下钻嵌套 Map。任一级缺失或类型不是 Map 时返回 null。
+     */
+    private Object resolveParamValue(Map<String, Object> params, String key) {
+        if (params == null) return null;
+        if (params.containsKey(key)) {
+            return params.get(key);
+        }
+        Object cur = params;
+        for (String part : key.split("\\.")) {
+            if (!(cur instanceof Map)) return null;
+            cur = ((Map<?, ?>) cur).get(part);
+            if (cur == null) return null;
+        }
+        return cur;
+    }
+
+    /** 占位符取值转文本：基础类型直出，对象/数组转 JSON，null 转空串 */
+    private String paramValueToString(Object val) {
+        if (val == null) return "";
+        if (val instanceof CharSequence || val instanceof Number || val instanceof Boolean) {
+            return String.valueOf(val);
+        }
+        try {
+            return JSON.toJSONString(val);
+        } catch (Exception e) {
+            return String.valueOf(val);
+        }
     }
 
     /**

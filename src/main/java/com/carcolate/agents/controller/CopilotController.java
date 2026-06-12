@@ -62,9 +62,18 @@ public class CopilotController {
      *     { "role": "客户", "content": "就这辆", "image": "https://x.com/car2.jpg", "time": "2026-05-19 11:30:40" },
      *     { "role": "客服", "content": "您好，请问有什么可以帮您",          "time": "2026-05-19 11:31:00" }
      *   ],
-     *   "historySummary": "客户前几日咨询过价格，倾向 30 万左右"
+     *   "historySummary": "客户前几日咨询过价格，倾向 30 万左右",
+     *   "otherParams": {
+     *     "userArea": "MA",
+     *     "uuid": "u-10086",
+     *     "user": { "age": 28 }
+     *   }
      * }
      * }</pre>
+     *
+     * <p><b>otherParams 说明：</b>额外业务参数，支持嵌套对象。需在 Agent 管理页配置「额外参数Key」
+     * （逗号分隔，如 uuid,user.age）后，即可在该 Agent 的前置 Prompt / 回复格式约束 / 语言风格 Prompt
+     * 中用 {@code {{uuid}}}、{@code {{user.age}}} 占位引用，运行时自动替换为实际值；未传值替换为空字符串。</p>
      *
      * <p><b>成功响应：</b></p>
      * <pre>{@code

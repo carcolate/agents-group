@@ -88,6 +88,7 @@ async function openEditor(id) {
     document.getElementById('f_id').value = '';
     document.getElementById('f_name').value = '';
     document.getElementById('f_mission').value = '';
+    document.getElementById('f_other_param_keys').value = '';
     document.getElementById('f_pre_prompt').value = '';
     document.getElementById('f_response_format').value = '';
     document.getElementById('f_style_prompt').value = '';
@@ -104,6 +105,7 @@ async function openEditor(id) {
         document.getElementById('f_id').value = a.id;
         document.getElementById('f_name').value = a.name || '';
         document.getElementById('f_mission').value = a.mission || '';
+        document.getElementById('f_other_param_keys').value = a.otherParamKeys || '';
         document.getElementById('f_pre_prompt').value = a.prePrompt || '';
         document.getElementById('f_response_format').value = a.responseFormat || '';
         document.getElementById('f_style_prompt').value = a.stylePrompt || '';
@@ -129,6 +131,7 @@ async function submitForm() {
     const body = {
         name: document.getElementById('f_name').value.trim(),
         mission: document.getElementById('f_mission').value.trim(),
+        otherParamKeys: document.getElementById('f_other_param_keys').value.trim() || null,
         prePrompt: document.getElementById('f_pre_prompt').value,
         responseFormat: document.getElementById('f_response_format').value || null,
         stylePrompt: document.getElementById('f_style_prompt').value || null,

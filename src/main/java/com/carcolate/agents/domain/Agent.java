@@ -48,6 +48,13 @@ public class Agent implements Serializable {
     private String stylePrompt;
 
     /**
+     * 额外参数Key列表，英文逗号分隔，如：uuid,user.age
+     * 对应 CopilotRequest.otherParams 传入的字段路径，
+     * 前置 Prompt / 回复格式约束 / 语言风格 Prompt 中可用 {{key}} 占位引用
+     */
+    private String otherParamKeys;
+
+    /**
      * 可选：覆盖全局模型名
      */
     private String modelName;

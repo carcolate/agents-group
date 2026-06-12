@@ -29,6 +29,7 @@ Content-Type: application/json
 | `currentMessage` | `String` | 是 | 客户当前发送的消息 |
 | `historyMessages` | `List<HistoryMessage>` | 否 | 历史消息（按时间正序，每条包含角色、内容、时间） |
 | `historySummary` | `String` | 否 | 更早历史消息的总结 |
+| `otherParams` | `Map<String, Object>` | 否 | 额外业务参数（支持嵌套对象），如 `{"userArea": "MA"}`。配合 Agent 配置的「额外参数Key」，以 `{{key}}` 占位符注入各 Prompt，详见 [动态变量](#动态变量-otherparams) |
 
 #### 请求示例
 
@@ -42,9 +43,28 @@ Content-Type: application/json
     { "role": "客户", "content": "就这辆", "image": "https://x.com/car2.jpg", "time": "2026-05-19 11:30:40" },
     { "role": "客服", "content": "您好，请问有什么可以帮您", "time": "2026-05-19 11:31:00" }
   ],
-  "historySummary": "客户前几日咨询过价格，倾向 30 万左右"
+  "historySummary": "客户前几日咨询过价格，倾向 30 万左右",
+  "otherParams": {
+    "userArea": "MA",
+    "uuid": "u-10086",
+    "user": { "age": 28 }
+  }
 }
 ```
+
+### 动态变量 (otherParams)
+
+`otherParams` 中的值可作为动态变量注入 Agent 的 **前置 Prompt / 回复格式约束 / 语言风格 Prompt**：
+
+1. **Agent 侧配置**：在 Agent 管理页「额外参数 Key」中声明本 Agent 使用的参数 key，多个用英文逗号隔开，如 `uuid,user.age`。key 支持点号路径取嵌套字段（`user.age` → `otherParams.user.age`）。
+2. **Prompt 中引用**：在上述三类 Prompt 中以 `{{key}}` 占位，如 `{{uuid}}`、`{{user.age}}`。
+3. **运行时替换规则**：
+   - 仅替换「额外参数 Key」中声明过的 key，未声明的 `{{xxx}}` 原样保留；
+   - 声明了但请求未传值 → 替换为空字符串；
+   - 取值优先整键直查（兼容客户端直接传扁平 key `"user.age"`），未命中再按点号逐级下钻嵌套对象；
+   - 值为字符串 / 数字 / 布尔时直接输出，对象 / 数组输出为 JSON 字符串。
+
+**示例**：Agent 配置额外参数 Key 为 `uuid,user.age`，前置 Prompt 写 `客户ID：{{uuid}}，年龄：{{user.age}}`，请求传上方示例的 `otherParams`，实际注入 LLM 的内容为 `客户ID：u-10086，年龄：28`。
 
 ### 成功响应 (code=0)
 
