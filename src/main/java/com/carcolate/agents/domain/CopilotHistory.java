@@ -35,6 +35,11 @@ public class CopilotHistory implements Serializable {
     private String agentName;
 
     /**
+     * 调用方用户标识，纯记录字段（来自 CopilotRequest.userId）
+     */
+    private String userId;
+
+    /**
      * 实际调用的模型名（Agent 自定义 → 取自定义；空 → 回落到全局默认）
      */
     private String modelName;

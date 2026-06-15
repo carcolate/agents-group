@@ -55,6 +55,7 @@ public class CopilotController {
      *
      * {
      *   "agentId": 1,
+     *   "userId": "u-10086",
      *   "currentMessage": "这辆车多少钱？",
      *   "historyMessages": [
      *     { "role": "客户", "content": "你好",                            "time": "2026-05-19 11:30:00" },

@@ -18,7 +18,7 @@ public class CopilotHistoryServiceImpl extends ServiceImpl<CopilotHistoryMapper,
 
     @Override
     public void recordFromSnapshot(TaskSnapshot snap, String userMessage, String modelName,
-                                   int llmRound, long costMs) {
+                                   int llmRound, long costMs, String userId) {
         if (snap == null) {
             return;
         }
@@ -28,6 +28,7 @@ public class CopilotHistoryServiceImpl extends ServiceImpl<CopilotHistoryMapper,
             h.setUuid(snap.getUuid());
             h.setAgentId(snap.getAgentId());
             h.setAgentName(snap.getAgentName());
+            h.setUserId(userId);
             h.setModelName(modelName);
             h.setUserMessage(userMessage);
             h.setFinalReply(snap.getFinalReply());

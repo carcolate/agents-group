@@ -26,6 +26,7 @@ Content-Type: application/json
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `agentId` | `Long` | 是 | Agent ID |
+| `userId` | `String` | 否 | 调用方用户标识，仅用于落 `tb_copilot_history.user_id`，便于按用户回溯调用记录；不参与 Prompt 拼接 |
 | `currentMessage` | `String` | 是 | 客户当前发送的消息 |
 | `historyMessages` | `List<HistoryMessage>` | 否 | 历史消息（按时间正序，每条包含角色、内容、时间） |
 | `historySummary` | `String` | 否 | 更早历史消息的总结 |
@@ -36,6 +37,7 @@ Content-Type: application/json
 ```json
 {
   "agentId": 1,
+  "userId": "u-10086",
   "currentMessage": "这辆车多少钱？",
   "historyMessages": [
     { "role": "客户", "content": "你好",                "time": "2026-05-19 11:30:00" },

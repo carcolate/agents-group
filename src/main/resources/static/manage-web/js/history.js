@@ -33,6 +33,8 @@ async function loadList() {
     if (kw) params.userMessage = kw;
     const uuid = document.getElementById('searchUuid').value.trim();
     if (uuid) params.uuid = uuid;
+    const userId = document.getElementById('searchUserId').value.trim();
+    if (userId) params.userId = userId;
     const rsp = await API.get('/manage/copilot/history/list', params);
     if (rsp.code !== 0) { toast(rsp.msg || '加载失败', true); return; }
     renderList(rsp.data || [], rsp.total || 0);
@@ -63,12 +65,13 @@ function renderList(rows, total) {
     historyPage.total = total;
     const tbody = document.getElementById('tbody');
     if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#95a5a6;">暂无数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#95a5a6;">暂无数据</td></tr>';
     } else {
         tbody.innerHTML = rows.map(r => `
             <tr>
                 <td><span class="mono">${escapeHtml(formatTime(r.createdAt))}</span></td>
                 <td>${escapeHtml(agentName(r.agentId, r.agentName))}</td>
+                <td><span class="mono" title="${escapeHtml(r.userId || '')}">${escapeHtml(r.userId || '-')}</span></td>
                 <td><span class="mono" title="${escapeHtml(r.modelName || '')}">${escapeHtml(r.modelName || '-')}</span></td>
                 <td title="${escapeHtml(r.userMessage || '')}">${escapeHtml(truncate(r.userMessage, 60))}</td>
                 <td title="${escapeHtml(r.finalReply || '')}">${escapeHtml(truncate(r.finalReply, 80))}</td>

@@ -14,6 +14,12 @@ public class CopilotRequest {
     private Long agentId;
 
     /**
+     * 调用方用户标识，仅用于落 tb_copilot_history.user_id，便于按用户回溯调用记录。
+     * 不参与 Prompt 拼接、不影响业务逻辑；为空时历史记录的 user_id 即为 null。
+     */
+    private String userId;
+
+    /**
      * 客户当前发送的消息
      */
     private String currentMessage;

@@ -566,8 +566,9 @@ public class CopilotRunner {
     private void persistHistory(TaskSnapshot snap, CopilotRequest req, String actualModel,
                                 int llmRound, long startMs) {
         String userMsg = req == null ? null : req.getCurrentMessage();
+        String userId = req == null ? null : req.getUserId();
         long costMs = System.currentTimeMillis() - startMs;
-        copilotHistoryService.recordFromSnapshot(snap, userMsg, actualModel, llmRound, costMs);
+        copilotHistoryService.recordFromSnapshot(snap, userMsg, actualModel, llmRound, costMs, userId);
     }
 
     private void save(TaskSnapshot snap) {
