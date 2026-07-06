@@ -355,7 +355,7 @@ public class CopilotRunner {
             sb.append("\n\n## 更早历史消息总结\n").append(req.getHistorySummary());
         }
         if (req.getHistoryMessages() != null && !req.getHistoryMessages().isEmpty()) {
-            sb.append("\n\n## 近期对话\n");
+            sb.append("\n\n## 以下是历史对话，务必参考\n");
             for (HistoryMessage m : req.getHistoryMessages()) {
                 if (m == null) continue;
                 String role = m.getRole() == null || m.getRole().isBlank() ? "未知角色" : m.getRole();
