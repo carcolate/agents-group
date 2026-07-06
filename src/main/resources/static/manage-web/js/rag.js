@@ -3,7 +3,6 @@ let agentOptions = [];
 
 window.addEventListener('DOMContentLoaded', async () => {
     await loadAgents();
-    loadList();
     initDragDrop();
 });
 
@@ -12,24 +11,35 @@ async function loadAgents() {
     if (rsp.code !== 0) { toast(rsp.msg || '加载 Agent 失败', true); return; }
     agentOptions = rsp.data || [];
     const filter = document.getElementById('filterAgent');
-    filter.innerHTML = '<option value="">全部 Agent</option>' +
+    filter.innerHTML = '<option value="">请选择 Agent</option>' +
         agentOptions.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
     const f = document.getElementById('f_agent_id');
     f.innerHTML = agentOptions.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
 }
 
 async function loadList() {
+    const aid = document.getElementById('filterAgent').value;
+    if (!aid) {
+        document.getElementById('tbody').innerHTML = '<tr><td colspan="7" style="text-align:center;color:#95a5a6;">请先选择 Agent</td></tr>';
+        document.getElementById('total').textContent = '0';
+        document.getElementById('pageInfo').textContent = '1 / 1';
+        return;
+    }
     const params = {
         pageNum: ragPage.pageNum,
-        pageSize: ragPage.pageSize
+        pageSize: ragPage.pageSize,
+        agentId: aid
     };
-    const aid = document.getElementById('filterAgent').value;
-    if (aid) params.agentId = aid;
     const kw = document.getElementById('searchTitle').value.trim();
     if (kw) params.title = kw;
     const rsp = await API.get('/manage/rag/list', params);
     if (rsp.code !== 0) { toast(rsp.msg || '加载失败', true); return; }
     renderList(rsp.data || [], rsp.total || 0);
+}
+
+function onAgentChange() {
+    ragPage.pageNum = 1;
+    loadList();
 }
 
 function agentName(id) {

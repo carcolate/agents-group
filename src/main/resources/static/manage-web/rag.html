@@ -21,8 +21,8 @@
         <div class="toolbar">
             <h2>知识库列表</h2>
             <div class="toolbar-actions">
-                <select id="filterAgent">
-                    <option value="">全部 Agent</option>
+                <select id="filterAgent" onchange="onAgentChange()">
+                    <option value="">请选择 Agent</option>
                 </select>
                 <input id="searchTitle" placeholder="按标题搜索" />
                 <button onclick="loadList()">查询</button>
