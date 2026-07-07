@@ -350,12 +350,22 @@ public class CopilotRunner {
         if (kb.catalog != null && !kb.catalog.isEmpty()) {
             sb.append("\n\n## 可用知识库目录（如需详情请调用工具）\n").append(kb.catalog);
         }
-
+        sb.append("\n\n## 工具调用规则\n");
+        sb.append("- 上方【前置知识库】已提供完整正文，回答时可直接引用，无需调用工具。\n");
+        sb.append("- 上方【可用知识库目录】每条记录前的 [ID=xxx] 是该文档的 ragId。\n");
+        sb.append("- 可用工具：\n");
+        sb.append("  · search_knowledge_base(query, topK?)：按语义关键字检索片段，适合不确定答案落在哪个文档时使用。\n");
+        sb.append("  · get_knowledge_document(ragId)：直接拉取指定文档的全量正文+概览，适合已经在目录里锁定目标文档、需要完整内容时使用。\n");
+        sb.append("- 决策顺序：前置知识库够用 → 直接回答；目录里能精准锁定某文档 → 用 get_knowledge_document 取全文；只有模糊关键字 → 用 search_knowledge_base 检索片段。\n");
+        sb.append("- 严禁凭空捏造未在【前置知识库】或工具返回结果中出现的事实、参数、价格。\n");
+        sb.append("- 不需要调用工具时，直接给出最终回复（输出客户实际看到的那句话即可，不要再附思考过程）。\n");
         if (req.getHistorySummary() != null && !req.getHistorySummary().isBlank()) {
             sb.append("\n\n## 更早历史消息总结\n").append(req.getHistorySummary());
         }
         if (req.getHistoryMessages() != null && !req.getHistoryMessages().isEmpty()) {
-            sb.append("\n\n## 以下是历史对话，务必参考\n");
+            sb.append("\n\n## 历史对话说明\n");
+            sb.append("以下是历史对话记录，客户可能连续发多条消息，请理解完整上下文后再回复。\n");
+            sb.append("特别注意：不要仅基于最后一条消息回复，要结合前面的对话内容。\n");
             for (HistoryMessage m : req.getHistoryMessages()) {
                 if (m == null) continue;
                 String role = m.getRole() == null || m.getRole().isBlank() ? "未知角色" : m.getRole();
@@ -374,15 +384,6 @@ public class CopilotRunner {
                 sb.append("\n");
             }
         }
-        sb.append("\n\n## 工具调用规则\n");
-        sb.append("- 上方【前置知识库】已提供完整正文，回答时可直接引用，无需调用工具。\n");
-        sb.append("- 上方【可用知识库目录】每条记录前的 [ID=xxx] 是该文档的 ragId。\n");
-        sb.append("- 可用工具：\n");
-        sb.append("  · search_knowledge_base(query, topK?)：按语义关键字检索片段，适合不确定答案落在哪个文档时使用。\n");
-        sb.append("  · get_knowledge_document(ragId)：直接拉取指定文档的全量正文+概览，适合已经在目录里锁定目标文档、需要完整内容时使用。\n");
-        sb.append("- 决策顺序：前置知识库够用 → 直接回答；目录里能精准锁定某文档 → 用 get_knowledge_document 取全文；只有模糊关键字 → 用 search_knowledge_base 检索片段。\n");
-        sb.append("- 严禁凭空捏造未在【前置知识库】或工具返回结果中出现的事实、参数、价格。\n");
-        sb.append("- 不需要调用工具时，直接给出最终回复（输出客户实际看到的那句话即可，不要再附思考过程）。\n");
         return sb.toString();
     }
 
