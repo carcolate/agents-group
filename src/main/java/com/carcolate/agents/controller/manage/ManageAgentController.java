@@ -1,14 +1,19 @@
 package com.carcolate.agents.controller.manage;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.carcolate.agents.config.LangChainConfig;
 import com.carcolate.agents.domain.Agent;
+import com.carcolate.agents.domain.RagBase;
 import com.carcolate.agents.mapper.AgentMapper;
 import com.carcolate.agents.response.CodeMsg;
 import com.carcolate.agents.response.Rsp;
 import com.carcolate.agents.service.AgentService;
+import com.carcolate.agents.service.RagBaseService;
+import com.carcolate.agents.service.RagVectorService;
 import com.github.yitter.idgen.YitIdHelper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -31,6 +36,12 @@ public class ManageAgentController {
 
     @Autowired
     private LangChainConfig langChainConfig;
+
+    @Autowired
+    private RagBaseService ragBaseService;
+
+    @Autowired
+    private RagVectorService ragVectorService;
 
     /**
      * 返回配置文件中可用的模型名列表，第一项即为默认模型
@@ -65,6 +76,9 @@ public class ManageAgentController {
                 || agent.getPrePrompt() == null || agent.getPrePrompt().isBlank()) {
             return Rsp.error(CodeMsg.PARAM_ERROR);
         }
+        if (!validRuntimeConfig(agent)) {
+            return Rsp.error(CodeMsg.PARAM_ERROR);
+        }
         agent.setId(YitIdHelper.nextId());
         if (agent.getStatus() == null) agent.setStatus(1);
         if (agent.getMaxSteps() == null || agent.getMaxSteps() <= 0) agent.setMaxSteps(6);
@@ -79,14 +93,54 @@ public class ManageAgentController {
         if (agent.getId() == null) {
             return Rsp.error(CodeMsg.PARAM_ERROR);
         }
+        Agent old = agentService.getById(agent.getId());
+        if (old == null) {
+            return Rsp.error(CodeMsg.DATA_NULL);
+        }
+        String effectiveName = agent.getName() == null ? old.getName() : agent.getName();
+        String effectivePrePrompt = agent.getPrePrompt() == null ? old.getPrePrompt() : agent.getPrePrompt();
+        if (effectiveName == null || effectiveName.isBlank()
+                || effectivePrePrompt == null || effectivePrePrompt.isBlank()) {
+            return Rsp.error(CodeMsg.PARAM_ERROR);
+        }
+        if (agent.getTemperature() != null
+                && (agent.getTemperature().doubleValue() < 0 || agent.getTemperature().doubleValue() > 2)) {
+            return Rsp.error(CodeMsg.PARAM_ERROR);
+        }
+        if (agent.getMaxSteps() != null && (agent.getMaxSteps() < 1 || agent.getMaxSteps() > 20)) {
+            return Rsp.error(CodeMsg.PARAM_ERROR);
+        }
+        if (agent.getStatus() != null && agent.getStatus() != 0 && agent.getStatus() != 1) {
+            return Rsp.error(CodeMsg.PARAM_ERROR);
+        }
         agent.setUpdatedAt(Instant.now());
         boolean ok = agentService.updateById(agent);
         return ok ? Rsp.success(agent) : Rsp.error(CodeMsg.UPDATE_ERROR);
     }
 
+    @Transactional
     @PostMapping("delete")
     public Object delete(@RequestParam("id") Long id) {
+        if (id == null || id <= 0 || agentService.getById(id) == null) {
+            return Rsp.error(CodeMsg.DATA_NULL);
+        }
+        ragBaseService.remove(new LambdaQueryWrapper<RagBase>().eq(RagBase::getAgentId, id));
         boolean ok = agentService.removeById(id);
+        if (ok) {
+            // 删除数据库知识后清理该 Agent 的向量索引。
+            ragVectorService.rebuildByAgent(id);
+        }
         return ok ? Rsp.success() : Rsp.error(CodeMsg.DELETE_ERROR);
+    }
+
+    private boolean validRuntimeConfig(Agent agent) {
+        if (agent.getTemperature() != null
+                && (agent.getTemperature().doubleValue() < 0 || agent.getTemperature().doubleValue() > 2)) {
+            return false;
+        }
+        if (agent.getMaxSteps() != null && (agent.getMaxSteps() < 1 || agent.getMaxSteps() > 20)) {
+            return false;
+        }
+        return agent.getStatus() == null || agent.getStatus() == 0 || agent.getStatus() == 1;
     }
 }

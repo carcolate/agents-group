@@ -8,6 +8,7 @@ import com.carcolate.agents.response.Rsp;
 import com.carcolate.agents.service.RagBaseService;
 import com.carcolate.agents.service.RagSummaryService;
 import com.carcolate.agents.service.RagVectorService;
+import com.carcolate.agents.service.AgentService;
 import com.github.yitter.idgen.YitIdHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,6 +36,9 @@ public class ManageRagController {
     @Autowired
     private RagSummaryService ragSummaryService;
 
+    @Autowired
+    private AgentService agentService;
+
     @GetMapping("list")
     public Object list(RagBase ragBase,
                        @RequestParam(value = "pageNum", defaultValue = "1") int pageNum,
@@ -55,9 +59,7 @@ public class ManageRagController {
 
     @PostMapping("add")
     public Object add(@RequestBody RagBase ragBase) {
-        if (ragBase.getAgentId() == null || ragBase.getAgentId() <= 0
-                || ragBase.getTitle() == null || ragBase.getTitle().isBlank()
-                || ragBase.getContent() == null || ragBase.getContent().isBlank()) {
+        if (!validKnowledge(ragBase, null)) {
             return Rsp.error(CodeMsg.PARAM_ERROR);
         }
         ragBase.setId(YitIdHelper.nextId());
@@ -87,6 +89,9 @@ public class ManageRagController {
         RagBase old = ragBaseService.getById(ragBase.getId());
         if (old == null) {
             return Rsp.error(CodeMsg.DATA_NULL);
+        }
+        if (!validKnowledge(ragBase, old)) {
+            return Rsp.error(CodeMsg.PARAM_ERROR);
         }
         // 前置知识库不需要摘要；AI 自检索类型才走摘要生成逻辑
         Integer effectiveEngage = ragBase.getEngageType() != null
@@ -137,5 +142,18 @@ public class ManageRagController {
     public Object rebuild(@RequestParam("agentId") Long agentId) {
         ragVectorService.rebuildByAgent(agentId);
         return Rsp.success();
+    }
+
+    private boolean validKnowledge(RagBase current, RagBase old) {
+        Long agentId = current.getAgentId() == null && old != null ? old.getAgentId() : current.getAgentId();
+        String title = current.getTitle() == null && old != null ? old.getTitle() : current.getTitle();
+        String content = current.getContent() == null && old != null ? old.getContent() : current.getContent();
+        Integer status = current.getStatus() == null && old != null ? old.getStatus() : current.getStatus();
+        Integer engageType = current.getEngageType() == null && old != null ? old.getEngageType() : current.getEngageType();
+        return agentId != null && agentId > 0 && agentService.getById(agentId) != null
+                && title != null && !title.isBlank()
+                && content != null && !content.isBlank()
+                && (status == null || status == 0 || status == 1)
+                && (engageType == null || engageType == RagBase.ENGAGE_RAG_SEARCH || engageType == RagBase.ENGAGE_PREPEND);
     }
 }
