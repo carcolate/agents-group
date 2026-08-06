@@ -34,6 +34,18 @@ public class RagBase implements Serializable {
      */
     private String content;
 
+    /** 可选：自动刷新来源 URL，响应正文会覆盖 content。 */
+    private String url;
+
+    /** 是否开启自动从 URL 刷新：1=开启，0=关闭。 */
+    private Integer autoRefresh;
+
+    /** 自动刷新间隔（分钟），0 表示每次 Copilot 请求都刷新。 */
+    private Integer refreshIntervalMinutes;
+
+    /** 最近一次成功从 URL 刷新的时间。 */
+    private Instant lastRefreshTime;
+
     /**
      * LLM 自动生成的文档摘要（100 字以内），供 Agent 决策时作为知识库目录使用
      */

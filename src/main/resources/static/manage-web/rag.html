@@ -91,11 +91,28 @@
                 <p class="desc" id="engage_desc">默认：保存时自动切片向量化，由 LLM 通过工具按需检索。</p>
             </div>
             <div class="form-row">
+                <label>自动刷新 URL</label>
+                <input id="f_url" placeholder="填写后可从 URL 自动覆盖正文" />
+            </div>
+            <div class="form-row two">
+                <div>
+                    <label><input id="f_auto_refresh" type="checkbox" /> 自动从 URL 刷新</label>
+                </div>
+                <div>
+                    <label>刷新间隔（分钟，0 表示每次 Copilot 请求都刷新）</label>
+                    <input id="f_refresh_interval" type="number" min="0" value="60" />
+                </div>
+            </div>
+            <div class="form-row">
+                <label>上次刷新时间</label>
+                <input id="f_last_refresh_time" readonly />
+            </div>
+            <div class="form-row">
                 <label>标题 *</label>
                 <input id="f_title" placeholder="例如：极石汽车产品手册 - 配置篇" />
             </div>
             <div class="form-row">
-                <label>文档内容 *（Markdown / 纯文本）</label>
+                <label>文档内容（Markdown / 纯文本；开启 URL 自动刷新时可留空）</label>
                 <textarea id="f_content" rows="16" placeholder="文档全文，保存后会自动重新切片+向量化，并由 LLM 生成 100 字摘要"></textarea>
                 <p class="desc">拖入 .md / .txt 文件快速填充</p>
             </div>

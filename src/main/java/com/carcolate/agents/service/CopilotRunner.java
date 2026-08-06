@@ -66,6 +66,9 @@ public class CopilotRunner {
     private RagBaseService ragBaseService;
 
     @Autowired
+    private RagRefreshService ragRefreshService;
+
+    @Autowired
     private CopilotHistoryService copilotHistoryService;
 
     @Autowired
@@ -118,6 +121,8 @@ public class CopilotRunner {
 
     private void doRun(String uuid, Agent agent, CopilotRequest req, String actualModel,
                        long startMs, int[] llmRoundRef) {
+        // 刷新属于 Copilot 异步任务的一部分，完成后才读取知识库并开始模型调用。
+        ragRefreshService.refreshForAgent(agent.getId());
         String systemPrompt = buildSystemPrompt(agent, req);
         TaskSnapshot snap = load(uuid);
         if (snap != null) {

@@ -104,6 +104,10 @@ async function openEditor(id) {
     document.getElementById('f_title').value = '';
     document.getElementById('f_content').value = '';
     document.getElementById('f_summary').value = '';
+    document.getElementById('f_url').value = '';
+    document.getElementById('f_auto_refresh').checked = false;
+    document.getElementById('f_refresh_interval').value = '60';
+    document.getElementById('f_last_refresh_time').value = '';
     document.getElementById('f_status').value = '1';
     document.getElementById('f_engage_type').value = '1';
     const filterAid = document.getElementById('filterAgent').value;
@@ -117,6 +121,10 @@ async function openEditor(id) {
         document.getElementById('f_title').value = r.title || '';
         document.getElementById('f_content').value = r.content || '';
         document.getElementById('f_summary').value = r.summary || '';
+        document.getElementById('f_url').value = r.url || '';
+        document.getElementById('f_auto_refresh').checked = Number(r.autoRefresh) === 1;
+        document.getElementById('f_refresh_interval').value = r.refreshIntervalMinutes == null ? '60' : r.refreshIntervalMinutes;
+        document.getElementById('f_last_refresh_time').value = r.lastRefreshTime || '';
         document.getElementById('f_status').value = r.status == null ? '1' : String(r.status);
         document.getElementById('f_engage_type').value = r.engageType == null ? '1' : String(r.engageType);
     }
@@ -142,16 +150,22 @@ function closeEditor() { hideModal('editor'); }
 async function submitForm() {
     const id = document.getElementById('f_id').value;
     const engageType = Number(document.getElementById('f_engage_type').value) || 1;
+    const autoRefresh = document.getElementById('f_auto_refresh').checked;
+    const url = document.getElementById('f_url').value.trim();
     const body = {
         agentId: document.getElementById('f_agent_id').value,
         title: document.getElementById('f_title').value.trim(),
         content: document.getElementById('f_content').value,
+        // 用空字符串表达清空 URL，避免更新接口把旧 URL 合并回来。
+        url: url,
+        autoRefresh: autoRefresh ? 1 : 0,
+        refreshIntervalMinutes: Number(document.getElementById('f_refresh_interval').value) || 0,
         summary: engageType === 2 ? null : (document.getElementById('f_summary').value.trim() || null),
         engageType: engageType,
         status: Number(document.getElementById('f_status').value)
     };
-    if (!body.agentId || !body.title || !body.content) {
-        toast('Agent / 标题 / 内容均必填', true);
+    if (!body.agentId || !body.title || (!autoRefresh && !body.content) || (autoRefresh && !url)) {
+        toast(autoRefresh ? '开启自动刷新时 Agent / 标题 / URL 必填' : 'Agent / 标题 / 内容均必填', true);
         return;
     }
     document.getElementById('loadingText').textContent = engageType === 2
