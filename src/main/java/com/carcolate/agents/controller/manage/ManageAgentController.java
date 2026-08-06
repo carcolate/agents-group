@@ -103,10 +103,6 @@ public class ManageAgentController {
                 || effectivePrePrompt == null || effectivePrePrompt.isBlank()) {
             return Rsp.error(CodeMsg.PARAM_ERROR);
         }
-        if (agent.getTemperature() != null
-                && (agent.getTemperature().doubleValue() < 0 || agent.getTemperature().doubleValue() > 2)) {
-            return Rsp.error(CodeMsg.PARAM_ERROR);
-        }
         if (agent.getMaxSteps() != null && (agent.getMaxSteps() < 1 || agent.getMaxSteps() > 20)) {
             return Rsp.error(CodeMsg.PARAM_ERROR);
         }
@@ -134,10 +130,6 @@ public class ManageAgentController {
     }
 
     private boolean validRuntimeConfig(Agent agent) {
-        if (agent.getTemperature() != null
-                && (agent.getTemperature().doubleValue() < 0 || agent.getTemperature().doubleValue() > 2)) {
-            return false;
-        }
         if (agent.getMaxSteps() != null && (agent.getMaxSteps() < 1 || agent.getMaxSteps() > 20)) {
             return false;
         }

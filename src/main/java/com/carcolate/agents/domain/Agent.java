@@ -6,7 +6,6 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.io.Serializable;
-import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
@@ -58,11 +57,6 @@ public class Agent implements Serializable {
      * 可选：覆盖全局模型名
      */
     private String modelName;
-
-    /**
-     * 可选：覆盖全局温度
-     */
-    private BigDecimal temperature;
 
     /**
      * Agent 单次最多决策轮数

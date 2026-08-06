@@ -133,9 +133,8 @@ public class CopilotRunner {
         }
 
 
-        // 按 Agent 配置动态构建 ChatModel，未设置时回退到全局默认（available-models 第一项）
-        Double agentTemp = agent.getTemperature() == null ? null : agent.getTemperature().doubleValue();
-        ChatModel chatModel = langChainConfig.buildChatModel(agent.getModelName(), agentTemp);
+        // 按 Agent 配置动态选择模型，使用模型默认采样参数。
+        ChatModel chatModel = langChainConfig.buildChatModel(agent.getModelName());
 
         int maxSteps = agent.getMaxSteps() == null || agent.getMaxSteps() <= 0 ? 6 : agent.getMaxSteps();
         for (int i = 0; i < maxSteps; i++) {

@@ -45,7 +45,7 @@ public class RagSummaryService {
                 ? content.substring(0, CONTENT_TRUNCATE) + "……(后文略)"
                 : content;
         try {
-            ChatModel model = langChainConfig.buildChatModel(null, 0.2);
+            ChatModel model = langChainConfig.buildChatModel(null);
             String sys = "你是文档摘要助手。请严格用一句话中文概括下方文档的核心主题与覆盖范围，"
                     + "禁止编造未出现的事实，禁止加任何前后缀（如\"本文档介绍了\"、\"摘要：\"），"
                     + "总长度严格控制在 100 字以内，只输出摘要正文。";

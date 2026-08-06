@@ -30,9 +30,6 @@ public class LangChainConfig {
     @Value("${copilot.llm.available-models}")
     private List<String> availableModels;
 
-    @Value("${copilot.llm.temperature:0.3}")
-    private Double temperature;
-
     @Value("${copilot.llm.timeout-seconds:60}")
     private long timeoutSeconds;
 
@@ -70,17 +67,14 @@ public class LangChainConfig {
     }
 
     /**
-     * 根据 Agent 偏好动态构建 ChatModel。
-     * 传入参数为空时回退到全局默认（模型名取列表第一项，温度取 copilot.llm.temperature）。
+     * 根据 Agent 模型偏好动态构建 ChatModel，使用模型默认采样参数。
      */
-    public ChatModel buildChatModel(String modelName, Double temperatureOverride) {
+    public ChatModel buildChatModel(String modelName) {
         String finalModel = (modelName == null || modelName.isBlank()) ? getDefaultModelName() : modelName;
-        Double finalTemp = temperatureOverride == null ? this.temperature : temperatureOverride;
         return OpenAiChatModel.builder()
                 .baseUrl(baseUrl)
                 .apiKey(apiKey)
                 .modelName(finalModel)
-                .temperature(finalTemp)
                 .timeout(Duration.ofSeconds(timeoutSeconds))
                 .logRequests(logRequests)
                 .logResponses(logResponses)
@@ -88,12 +82,10 @@ public class LangChainConfig {
                 .build();
     }
 
-    /**
-     * 默认 ChatModel Bean，使用列表第一项 + 全局温度。
-     */
+    /** 默认 ChatModel Bean，使用列表第一项。 */
     @Bean
     public ChatModel chatModel() {
-        return buildChatModel(null, null);
+        return buildChatModel(null);
     }
 
     @Bean

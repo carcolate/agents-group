@@ -94,7 +94,6 @@ async function openEditor(id) {
     document.getElementById('f_style_prompt').value = '';
     renderModelSelect();
     document.getElementById('f_model_name').value = '';
-    document.getElementById('f_temperature').value = '';
     document.getElementById('f_max_steps').value = '6';
     document.getElementById('f_status').value = '1';
     document.getElementById('f_remark').value = '';
@@ -110,7 +109,6 @@ async function openEditor(id) {
         document.getElementById('f_response_format').value = a.responseFormat || '';
         document.getElementById('f_style_prompt').value = a.stylePrompt || '';
         setModelSelectValue(a.modelName);
-        document.getElementById('f_temperature').value = a.temperature == null ? '' : a.temperature;
         document.getElementById('f_max_steps').value = a.maxSteps || 6;
         document.getElementById('f_status').value = a.status == null ? '1' : String(a.status);
         document.getElementById('f_remark').value = a.remark || '';
@@ -136,7 +134,6 @@ async function submitForm() {
         responseFormat: document.getElementById('f_response_format').value || null,
         stylePrompt: document.getElementById('f_style_prompt').value || null,
         modelName: (document.getElementById('f_model_name').value || '').trim() || null,
-        temperature: document.getElementById('f_temperature').value === '' ? null : Number(document.getElementById('f_temperature').value),
         maxSteps: Number(document.getElementById('f_max_steps').value) || 6,
         status: Number(document.getElementById('f_status').value),
         remark: document.getElementById('f_remark').value.trim()
