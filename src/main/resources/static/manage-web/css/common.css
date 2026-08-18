@@ -365,7 +365,6 @@ button.block { width: 100%; padding: 10px 14px; }
 .step-TOOL_CALL { border-left-color: #e67e22; }
 .step-TOOL_RESULT { border-left-color: #f1c40f; }
 .step-IMAGE_FETCH { border-left-color: #1abc9c; background: #f0fbf8; }
-.step-STYLE_REWRITE { border-left-color: #16a085; background: #eafaf5; }
 .step-FINAL_REPLY { border-left-color: #27ae60; background: #ecf9f1; }
 
 .tag-rag {

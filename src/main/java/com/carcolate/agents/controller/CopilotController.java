@@ -2,6 +2,7 @@ package com.carcolate.agents.controller;
 
 import com.carcolate.agents.dto.CopilotRequest;
 import com.carcolate.agents.dto.TaskSnapshot;
+import com.carcolate.agents.domain.enums.CopilotTaskType;
 import com.carcolate.agents.response.CodeMsg;
 import com.carcolate.agents.response.Rsp;
 import com.carcolate.agents.service.CopilotService;
@@ -105,8 +106,32 @@ public class CopilotController {
      */
     @PostMapping("chat")
     public Rsp<Map<String, String>> chat(@RequestBody CopilotRequest request) {
+        return submit(CopilotTaskType.CHAT, request);
+    }
+
+    @PostMapping("reback")
+    public Rsp<Map<String, String>> reback(@RequestBody CopilotRequest request) {
+        return submit(CopilotTaskType.REBACK, request);
+    }
+
+    @PostMapping("compact")
+    public Rsp<Map<String, String>> compact(@RequestBody CopilotRequest request) {
+        return submit(CopilotTaskType.COMPACT, request);
+    }
+
+    @PostMapping("summarize")
+    public Rsp<Map<String, String>> summarize(@RequestBody CopilotRequest request) {
+        return submit(CopilotTaskType.SUMMARIZE, request);
+    }
+
+    @PostMapping("tag")
+    public Rsp<Map<String, String>> tag(@RequestBody CopilotRequest request) {
+        return submit(CopilotTaskType.TAG, request);
+    }
+
+    private Rsp<Map<String, String>> submit(CopilotTaskType taskType, CopilotRequest request) {
         try {
-            String uuid = copilotService.submit(request);
+            String uuid = copilotService.submit(taskType, request);
             Map<String, String> data = new HashMap<>();
             data.put("uuid", uuid);
             return Rsp.success(data);
@@ -195,6 +220,15 @@ public class CopilotController {
      */
     @GetMapping("chat/result")
     public Rsp<TaskSnapshot> result(@RequestParam("uuid") String uuid) {
+        return getResult(uuid);
+    }
+
+    @GetMapping("result")
+    public Rsp<TaskSnapshot> genericResult(@RequestParam("uuid") String uuid) {
+        return getResult(uuid);
+    }
+
+    private Rsp<TaskSnapshot> getResult(String uuid) {
         TaskSnapshot snap = copilotService.get(uuid);
         if (snap == null) {
             return Rsp.error(CodeMsg.TASK_NOT_FOUND);

@@ -13,7 +13,6 @@ public enum StepType implements EnumInterface<String> {
     TOOL_CALL("TOOL_CALL"),
     TOOL_RESULT("TOOL_RESULT"),
     IMAGE_FETCH("IMAGE_FETCH"),
-    STYLE_REWRITE("STYLE_REWRITE"),
     FINAL_REPLY("FINAL_REPLY"),
     ERROR("ERROR");
 

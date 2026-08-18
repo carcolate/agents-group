@@ -2,6 +2,7 @@ package com.carcolate.agents.service.impl;
 
 import com.alibaba.fastjson2.JSON;
 import com.carcolate.agents.domain.Agent;
+import com.carcolate.agents.domain.enums.CopilotTaskType;
 import com.carcolate.agents.domain.enums.StepType;
 import com.carcolate.agents.domain.enums.TaskStatus;
 import com.carcolate.agents.dto.CopilotRequest;
@@ -38,7 +39,8 @@ public class CopilotServiceImpl implements CopilotService {
     private long ttlSeconds;
 
     @Override
-    public String submit(CopilotRequest request) {
+    public String submit(CopilotTaskType taskType, CopilotRequest request) {
+        if (taskType == null) taskType = CopilotTaskType.CHAT;
         if (request == null || request.getAgentId() == null) {
             throw new IllegalArgumentException("agentId 必填");
         }
@@ -51,6 +53,7 @@ public class CopilotServiceImpl implements CopilotService {
         snap.setUuid(uuid);
         snap.setAgentId(agent.getId());
         snap.setAgentName(agent.getName());
+        snap.setTaskType(taskType.getCode());
         snap.setStatus(TaskStatus.RUNNING.getCode());
         snap.setCreatedAt(Instant.now());
         snap.getSteps().add(StepRecord.of(StepType.USER_INPUT.getCode(), request.getCurrentMessage()));
@@ -60,7 +63,7 @@ public class CopilotServiceImpl implements CopilotService {
                 ttlSeconds,
                 TimeUnit.SECONDS
         );
-        copilotRunner.run(uuid, agent, request);
+        copilotRunner.run(uuid, agent, request, taskType);
         return uuid;
     }
 

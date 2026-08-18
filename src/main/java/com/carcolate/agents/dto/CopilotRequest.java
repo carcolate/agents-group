@@ -40,4 +40,14 @@ public class CopilotRequest {
      * 如 {{uuid}}、{{user.age}}
      */
     private Map<String, Object> otherParams;
+
+    /** tag 任务使用的当前 IM 标签定义；只允许返回其中的 key。 */
+    private List<TagOption> tagOptions;
+
+    @Data
+    public static class TagOption {
+        private String key;
+        private String nameCn;
+        private String nameEn;
+    }
 }

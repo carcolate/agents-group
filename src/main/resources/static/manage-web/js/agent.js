@@ -90,8 +90,6 @@ async function openEditor(id) {
     document.getElementById('f_mission').value = '';
     document.getElementById('f_other_param_keys').value = '';
     document.getElementById('f_pre_prompt').value = '';
-    document.getElementById('f_response_format').value = '';
-    document.getElementById('f_style_prompt').value = '';
     renderModelSelect();
     document.getElementById('f_model_name').value = '';
     document.getElementById('f_max_steps').value = '6';
@@ -106,8 +104,6 @@ async function openEditor(id) {
         document.getElementById('f_mission').value = a.mission || '';
         document.getElementById('f_other_param_keys').value = a.otherParamKeys || '';
         document.getElementById('f_pre_prompt').value = a.prePrompt || '';
-        document.getElementById('f_response_format').value = a.responseFormat || '';
-        document.getElementById('f_style_prompt').value = a.stylePrompt || '';
         setModelSelectValue(a.modelName);
         document.getElementById('f_max_steps').value = a.maxSteps || 6;
         document.getElementById('f_status').value = a.status == null ? '1' : String(a.status);
@@ -131,8 +127,6 @@ async function submitForm() {
         mission: document.getElementById('f_mission').value.trim(),
         otherParamKeys: document.getElementById('f_other_param_keys').value.trim() || null,
         prePrompt: document.getElementById('f_pre_prompt').value,
-        responseFormat: document.getElementById('f_response_format').value || null,
-        stylePrompt: document.getElementById('f_style_prompt').value || null,
         modelName: (document.getElementById('f_model_name').value || '').trim() || null,
         maxSteps: Number(document.getElementById('f_max_steps').value) || 6,
         status: Number(document.getElementById('f_status').value),
@@ -162,7 +156,7 @@ async function delAgent(id) {
 }
 
 function initDragDrop() {
-    ['f_pre_prompt', 'f_response_format', 'f_style_prompt'].forEach(id => bindDragDrop(id));
+    ['f_pre_prompt'].forEach(id => bindDragDrop(id));
 }
 
 function bindDragDrop(id) {

@@ -28,7 +28,7 @@ public class StepRecord {
     private String toolArgs;
 
     /**
-     * LLM 思维链（reasoning_content / thinking），仅 LLM_THINK / STYLE_REWRITE 可能有
+     * LLM 思维链（reasoning_content / thinking），仅 LLM_THINK 可能有
      */
     private String thinking;
 

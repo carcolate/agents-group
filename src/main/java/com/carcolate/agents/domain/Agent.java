@@ -40,16 +40,25 @@ public class Agent implements Serializable {
      */
     private String responseFormat;
 
-    /**
-     * 语言风格 Prompt：主 Agent 决策时不感知，
-     * 仅在生成最终回复后用于风格润色，输出终稿
-     */
-    private String stylePrompt;
+    /** 客户回访专用 Prompt。 */
+    private String rebackPrompt;
+
+    /** 会话压缩 Prompt；为空时使用系统默认值。 */
+    private String compactPrompt;
+
+    /** 客户信息总结 Prompt。 */
+    private String summarizePrompt;
+
+    /** 客户信息总结语言：zh / zh_en。 */
+    private String summarizeLanguage;
+
+    /** 允许 tag 任务输出的 tb_stage key JSON 数组。 */
+    private String tagStageKeys;
 
     /**
      * 额外参数Key列表，英文逗号分隔，如：uuid,user.age
      * 对应 CopilotRequest.otherParams 传入的字段路径，
-     * 前置 Prompt / 回复格式约束 / 语言风格 Prompt 中可用 {{key}} 占位引用
+     * 各类任务 Prompt 中可用 {{key}} 占位引用
      */
     private String otherParamKeys;
 

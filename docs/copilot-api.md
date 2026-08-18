@@ -273,7 +273,6 @@ POST /copilot/chat/cancel?uuid={uuid}
 | `TOOL_CALL` | 工具调用（如 RAG 搜索） | 橙色 |
 | `TOOL_RESULT` | 工具返回结果 | 黄色 |
 | `IMAGE_FETCH` | 历史图片下载日志（成功 / 失败都会落一条，content 含 URL、MIME、字节数、耗时或错误原因） | 青色 |
-| `STYLE_REWRITE` | 风格润色（agent.stylePrompt 非空时对草稿做的二次改写） | 绿松石 |
 | `FINAL_REPLY` | 最终回复给用户的内容 | 绿色 |
 | `ERROR` | 执行过程中发生的错误 | 红色 |
 

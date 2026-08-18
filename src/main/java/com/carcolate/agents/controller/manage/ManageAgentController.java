@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("manage/agent")
@@ -82,6 +83,9 @@ public class ManageAgentController {
         agent.setId(YitIdHelper.nextId());
         if (agent.getStatus() == null) agent.setStatus(1);
         if (agent.getMaxSteps() == null || agent.getMaxSteps() <= 0) agent.setMaxSteps(6);
+        if (agent.getSummarizeLanguage() == null || agent.getSummarizeLanguage().isBlank()) {
+            agent.setSummarizeLanguage("zh");
+        }
         agent.setCreatedAt(Instant.now());
         agent.setUpdatedAt(Instant.now());
         boolean ok = agentService.save(agent);
@@ -109,6 +113,9 @@ public class ManageAgentController {
         if (agent.getStatus() != null && agent.getStatus() != 0 && agent.getStatus() != 1) {
             return Rsp.error(CodeMsg.PARAM_ERROR);
         }
+        if (agent.getSummarizeLanguage() != null && !validLanguage(agent.getSummarizeLanguage())) {
+            return Rsp.error(CodeMsg.PARAM_ERROR);
+        }
         agent.setUpdatedAt(Instant.now());
         boolean ok = agentService.updateById(agent);
         return ok ? Rsp.success(agent) : Rsp.error(CodeMsg.UPDATE_ERROR);
@@ -133,6 +140,14 @@ public class ManageAgentController {
         if (agent.getMaxSteps() != null && (agent.getMaxSteps() < 1 || agent.getMaxSteps() > 20)) {
             return false;
         }
+        if (agent.getSummarizeLanguage() != null && !validLanguage(agent.getSummarizeLanguage())) {
+            return false;
+        }
         return agent.getStatus() == null || agent.getStatus() == 0 || agent.getStatus() == 1;
+    }
+
+    private boolean validLanguage(String language) {
+        String value = language.trim().toLowerCase(Locale.ROOT);
+        return "zh".equals(value) || "zh_en".equals(value);
     }
 }
