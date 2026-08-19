@@ -128,8 +128,11 @@ public class CopilotRunner {
 
     private void doRun(String uuid, Agent agent, CopilotRequest req, CopilotTaskType taskType, String actualModel,
                        long startMs, int[] llmRoundRef) {
-        // 刷新属于 Copilot 异步任务的一部分，完成后才读取知识库并开始模型调用。
-        ragRefreshService.refreshForAgent(agent.getId());
+        // 只有实时回复和客户回访可以使用知识库；其他功能不读取、也不刷新知识库。
+        if (supportsKnowledgeBase(taskType)) {
+            // 刷新属于 Copilot 异步任务的一部分，完成后才读取知识库并开始模型调用。
+            ragRefreshService.refreshForAgent(agent.getId());
+        }
         String systemPrompt = buildSystemPrompt(agent, req, taskType);
         TaskSnapshot snap = load(uuid);
         if (snap != null) {
@@ -449,18 +452,18 @@ public class CopilotRunner {
             }
         }
 
-        // 拉一次启用状态文档，按 engageType 分两路使用：
-        //   1 → 进入「可用知识库目录」，等 LLM 通过工具按需检索
-        //   2 → 全文拼到「前置知识库」章节，主 Agent 直接可读，不走向量库
-        KnowledgeBundle kb = loadKnowledgeBundle(agent.getId());
+        if (supportsKnowledgeBase(taskType)) {
+            // 拉一次启用状态文档，按 engageType 分两路使用：
+            //   1 → 进入「可用知识库目录」，等 LLM 通过工具按需检索
+            //   2 → 全文拼到「前置知识库」章节，主 Agent 直接可读，不走向量库
+            KnowledgeBundle kb = loadKnowledgeBundle(agent.getId());
 
-        if (kb.prependText != null && !kb.prependText.isEmpty()) {
-            sb.append("\n\n## 前置知识库（已全量提供，可直接引用）\n").append(kb.prependText);
-        }
-        if (kb.catalog != null && !kb.catalog.isEmpty()) {
-            sb.append("\n\n## 可用知识库目录（如需详情请调用工具）\n").append(kb.catalog);
-        }
-        if (taskType == CopilotTaskType.CHAT || taskType == CopilotTaskType.REBACK) {
+            if (kb.prependText != null && !kb.prependText.isEmpty()) {
+                sb.append("\n\n## 前置知识库（已全量提供，可直接引用）\n").append(kb.prependText);
+            }
+            if (kb.catalog != null && !kb.catalog.isEmpty()) {
+                sb.append("\n\n## 可用知识库目录（如需详情请调用工具）\n").append(kb.catalog);
+            }
             sb.append("\n\n## 工具调用规则\n");
             sb.append("- 前置知识库可直接引用，目录文档按需调用工具。\n");
             sb.append("- [ID=xxx] 是文档 ragId；可用 search_knowledge_base 和 get_knowledge_document。\n");
@@ -502,6 +505,10 @@ public class CopilotRunner {
             case TAG -> sb.append("只返回 JSON 数组，例如 [\"ice_breaking\"]，不能返回未允许的标签。");
         }
         return sb.toString();
+    }
+
+    private boolean supportsKnowledgeBase(CopilotTaskType taskType) {
+        return taskType == CopilotTaskType.CHAT || taskType == CopilotTaskType.REBACK;
     }
 
     private JSONObject parseTagStagePrompts(String value) {
