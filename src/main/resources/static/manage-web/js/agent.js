@@ -50,13 +50,12 @@ function renderList(rows, total) {
     agentPage.total = total;
     const tbody = document.getElementById('tbody');
     if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#95a5a6;">暂无数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#95a5a6;">暂无数据</td></tr>';
     } else {
         tbody.innerHTML = rows.map(r => `
             <tr>
                 <td><span class="mono">${escapeHtml(r.id)}</span></td>
                 <td>${escapeHtml(r.name)}</td>
-                <td>${escapeHtml(r.mission || '')}</td>
                 <td>${r.maxSteps || ''}</td>
                 <td>${statusTag(r.status)}</td>
                 <td class="ops">
@@ -87,7 +86,6 @@ async function openEditor(id) {
     document.getElementById('editorTitle').textContent = id ? '编辑 Agent' : '新增 Agent';
     document.getElementById('f_id').value = '';
     document.getElementById('f_name').value = '';
-    document.getElementById('f_mission').value = '';
     document.getElementById('f_other_param_keys').value = '';
     document.getElementById('f_pre_prompt').value = '';
     renderModelSelect();
@@ -101,7 +99,6 @@ async function openEditor(id) {
         const a = rsp.data;
         document.getElementById('f_id').value = a.id;
         document.getElementById('f_name').value = a.name || '';
-        document.getElementById('f_mission').value = a.mission || '';
         document.getElementById('f_other_param_keys').value = a.otherParamKeys || '';
         document.getElementById('f_pre_prompt').value = a.prePrompt || '';
         setModelSelectValue(a.modelName);
@@ -124,7 +121,6 @@ async function submitForm() {
     const id = document.getElementById('f_id').value;
     const body = {
         name: document.getElementById('f_name').value.trim(),
-        mission: document.getElementById('f_mission').value.trim(),
         otherParamKeys: document.getElementById('f_other_param_keys').value.trim() || null,
         prePrompt: document.getElementById('f_pre_prompt').value,
         modelName: (document.getElementById('f_model_name').value || '').trim() || null,

@@ -25,11 +25,6 @@ public class Agent implements Serializable {
     private String name;
 
     /**
-     * 身份与使命
-     */
-    private String mission;
-
-    /**
      * 前置 System Prompt（完整提示词）
      */
     private String prePrompt;

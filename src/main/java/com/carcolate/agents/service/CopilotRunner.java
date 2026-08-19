@@ -403,7 +403,6 @@ public class CopilotRunner {
     private String buildSystemPrompt(Agent agent, CopilotRequest req, CopilotTaskType taskType) {
         StringBuilder sb = new StringBuilder();
         sb.append(renderPromptVars(agent.getPrePrompt() == null ? "" : agent.getPrePrompt(), agent, req));
-        sb.append("\n\n## Agent 身份与使命\n").append(agent.getMission() == null ? "" : agent.getMission());
         String taskPrompt = switch (taskType) {
             case REBACK -> agent.getRebackPrompt();
             case COMPACT -> (agent.getCompactPrompt() == null || agent.getCompactPrompt().isBlank())
