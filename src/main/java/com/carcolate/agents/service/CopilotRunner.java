@@ -301,15 +301,22 @@ public class CopilotRunner {
                 if (values != null) values.forEach(x -> configured.add(String.valueOf(x)));
             } catch (Exception ignored) { }
         }
+        JSONObject tagPrompts = parseTagStagePrompts(agent == null ? null : agent.getTagStagePrompts());
+        Set<String> conditioned = new LinkedHashSet<>();
+        for (String key : configured) {
+            String prompt = tagPrompts.getString(key);
+            if (prompt != null && !prompt.isBlank()) conditioned.add(key);
+        }
         Set<String> allowed = new LinkedHashSet<>();
         if (req != null && req.getTagOptions() != null) {
             req.getTagOptions().forEach(x -> {
-                if (x != null && x.getKey() != null && (configured.isEmpty() || configured.contains(x.getKey()))) {
+                if (x != null && x.getKey() != null && conditioned.contains(x.getKey())) {
                     allowed.add(x.getKey());
                 }
             });
+        } else {
+            allowed.addAll(conditioned);
         }
-        if (allowed.isEmpty()) allowed.addAll(configured);
         return allowed;
     }
 
@@ -421,16 +428,24 @@ public class CopilotRunner {
         if (taskType == CopilotTaskType.TAG) {
             sb.append("\n\n## 标签选择规则\n只能从以下允许标签中选择，可返回一个或多个，没有符合项返回 []，只返回 JSON 数组：\n");
             Set<String> allowed = allowedTagKeys(req, agent);
+            JSONObject tagPrompts = parseTagStagePrompts(agent.getTagStagePrompts());
             if (req != null && req.getTagOptions() != null) {
                 req.getTagOptions().forEach(x -> {
                     if (x != null && x.getKey() != null && allowed.contains(x.getKey())) {
                         sb.append("- ").append(x.getKey()).append("：")
                                 .append(x.getNameCn() == null ? "" : x.getNameCn()).append(" ")
-                                .append(x.getNameEn() == null ? "" : x.getNameEn()).append("\n");
+                                .append(x.getNameEn() == null ? "" : x.getNameEn()).append("\n")
+                                .append("  允许条件：")
+                                .append(tagPrompts.getString(x.getKey()) == null
+                                        ? "未配置条件，不能仅凭模糊意向标记。"
+                                        : tagPrompts.getString(x.getKey()))
+                                .append("\n");
                     }
                 });
             } else {
-                allowed.forEach(x -> sb.append("- ").append(x).append("\n"));
+                allowed.forEach(x -> sb.append("- ").append(x).append("\n")
+                        .append("  允许条件：").append(tagPrompts.getString(x) == null
+                                ? "未配置条件，不能仅凭模糊意向标记。" : tagPrompts.getString(x)).append("\n"));
             }
         }
 
@@ -487,6 +502,16 @@ public class CopilotRunner {
             case TAG -> sb.append("只返回 JSON 数组，例如 [\"ice_breaking\"]，不能返回未允许的标签。");
         }
         return sb.toString();
+    }
+
+    private JSONObject parseTagStagePrompts(String value) {
+        if (value == null || value.isBlank()) return new JSONObject();
+        try {
+            JSONObject prompts = JSON.parseObject(value);
+            return prompts == null ? new JSONObject() : prompts;
+        } catch (Exception ignored) {
+            return new JSONObject();
+        }
     }
 
     /**

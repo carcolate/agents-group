@@ -50,6 +50,9 @@ public class Agent implements Serializable {
     /** 允许 tag 任务输出的 tb_stage key JSON 数组。 */
     private String tagStageKeys;
 
+    /** 每个允许标签的条件 Prompt，JSON 对象：{ "invite_visit": "..." }。 */
+    private String tagStagePrompts;
+
     /**
      * 额外参数Key列表，英文逗号分隔，如：uuid,user.age
      * 对应 CopilotRequest.otherParams 传入的字段路径，

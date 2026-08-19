@@ -1,5 +1,7 @@
 package com.carcolate.agents.controller.manage;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.carcolate.agents.config.LangChainConfig;
@@ -116,6 +118,9 @@ public class ManageAgentController {
         if (agent.getSummarizeLanguage() != null && !validLanguage(agent.getSummarizeLanguage())) {
             return Rsp.error(CodeMsg.PARAM_ERROR);
         }
+        if (!validTagStagePrompts(agent.getTagStagePrompts())) {
+            return Rsp.error(CodeMsg.PARAM_ERROR);
+        }
         agent.setUpdatedAt(Instant.now());
         boolean ok = agentService.updateById(agent);
         return ok ? Rsp.success(agent) : Rsp.error(CodeMsg.UPDATE_ERROR);
@@ -143,11 +148,29 @@ public class ManageAgentController {
         if (agent.getSummarizeLanguage() != null && !validLanguage(agent.getSummarizeLanguage())) {
             return false;
         }
+        if (!validTagStagePrompts(agent.getTagStagePrompts())) {
+            return false;
+        }
         return agent.getStatus() == null || agent.getStatus() == 0 || agent.getStatus() == 1;
     }
 
     private boolean validLanguage(String language) {
         String value = language.trim().toLowerCase(Locale.ROOT);
         return "zh".equals(value) || "zh_en".equals(value);
+    }
+
+    private boolean validTagStagePrompts(String value) {
+        if (value == null || value.isBlank()) return true;
+        try {
+            JSONObject prompts = JSON.parseObject(value);
+            if (prompts == null) return false;
+            for (String key : prompts.keySet()) {
+                String prompt = prompts.getString(key);
+                if (key == null || key.isBlank() || prompt == null || prompt.isBlank()) return false;
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

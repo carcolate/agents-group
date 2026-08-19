@@ -17,6 +17,7 @@ CREATE TABLE `tb_agent` (
   `summarize_prompt` MEDIUMTEXT NULL COMMENT '客户信息总结 Prompt',
   `summarize_language` VARCHAR(16) NOT NULL DEFAULT 'zh' COMMENT '总结语言：zh / zh_en',
   `tag_stage_keys` TEXT NULL COMMENT '允许输出的 tb_stage key JSON 数组',
+  `tag_stage_prompts` TEXT NULL COMMENT '各 tb_stage 的条件 Prompt JSON 对象',
   `other_param_keys` VARCHAR(1024) NULL COMMENT '动态参数 Key 列表',
   `model_name` VARCHAR(64) DEFAULT NULL COMMENT '可选：覆盖全局模型名',
   `max_steps` INT NOT NULL DEFAULT 6 COMMENT 'Agent 单次最多决策轮数，防死循环',
