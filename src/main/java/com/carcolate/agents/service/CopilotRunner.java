@@ -412,14 +412,14 @@ public class CopilotRunner {
 
     private String buildSystemPrompt(Agent agent, CopilotRequest req, CopilotTaskType taskType) {
         StringBuilder sb = new StringBuilder();
-        sb.append(renderPromptVars(agent.getPrePrompt() == null ? "" : agent.getPrePrompt(), agent, req));
         String taskPrompt = switch (taskType) {
+            case CHAT -> agent.getPrePrompt();
             case REBACK -> agent.getRebackPrompt();
             case COMPACT -> (agent.getCompactPrompt() == null || agent.getCompactPrompt().isBlank())
                     ? "压缩以下历史对话，只保留未来继续沟通所需的信息：客户身份、车型、预算、需求、痛点、异议、承诺、预约信息和未完成事项。不要编造，不要输出分析过程。"
                     : agent.getCompactPrompt();
             case SUMMARIZE -> agent.getSummarizePrompt();
-            default -> null;
+            case TAG -> null;
         };
         if (taskPrompt != null && !taskPrompt.isBlank()) {
             sb.append("\n\n## 当前功能 Prompt\n").append(renderPromptVars(taskPrompt, agent, req));
