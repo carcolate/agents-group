@@ -211,7 +211,7 @@ task 取值：
 | /copilot/compact | {"rsp":"压缩后的会话摘要"} |
 | /copilot/summarize，语言为 zh | {"zh":"中文客户信息总结"} |
 | /copilot/summarize，语言为 zh_en | {"zh":"中文客户信息总结","en":"English customer summary"} |
-| /copilot/tag | ["stage_key_1","stage_key_2"]，没有匹配项时为 [] |
+| /copilot/tag | {"stages":["stage_key_1","stage_key_2"],"msg":"标签判定理由"}；没有匹配项时 stages 为 []，msg 仍需说明原因 |
 
 示例：
 

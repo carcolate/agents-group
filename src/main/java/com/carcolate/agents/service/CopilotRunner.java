@@ -245,12 +245,17 @@ public class CopilotRunner {
         try {
             if (taskType == CopilotTaskType.TAG) {
                 JSONArray source;
+                String msg = "";
                 if (jsonText.startsWith("[")) {
                     source = JSON.parseArray(jsonText);
                 } else {
                     JSONObject object = JSON.parseObject(jsonText);
-                    Object value = object == null ? null : object.get("tags");
+                    Object value = object == null ? null : object.get("stages");
+                    if (value == null && object != null) value = object.get("tags");
                     source = value instanceof JSONArray ? (JSONArray) value : JSON.parseArray(String.valueOf(value));
+                    if (object != null && object.get("msg") != null) {
+                        msg = String.valueOf(object.get("msg")).trim();
+                    }
                 }
                 Set<String> allowed = allowedTagKeys(req, agent);
                 Set<String> result = new LinkedHashSet<>();
@@ -260,7 +265,10 @@ public class CopilotRunner {
                         if (allowed.contains(key)) result.add(key);
                     }
                 }
-                return JSON.toJSONString(result);
+                JSONObject reply = new JSONObject();
+                reply.put("stages", result);
+                reply.put("msg", msg);
+                return reply.toJSONString();
             }
             JSONObject object = jsonText.startsWith("{") ? JSON.parseObject(jsonText) : null;
             if (taskType == CopilotTaskType.CHAT || taskType == CopilotTaskType.REBACK) {
@@ -284,7 +292,12 @@ public class CopilotRunner {
             }
             return result.toJSONString();
         } catch (Exception e) {
-            if (taskType == CopilotTaskType.TAG) return "[]";
+            if (taskType == CopilotTaskType.TAG) {
+                JSONObject reply = new JSONObject();
+                reply.put("stages", new JSONArray());
+                reply.put("msg", "");
+                return reply.toJSONString();
+            }
             JSONObject result = new JSONObject();
             if (taskType == CopilotTaskType.COMPACT) result.put("rsp", text);
             else if (taskType == CopilotTaskType.SUMMARIZE) {
@@ -429,7 +442,7 @@ public class CopilotRunner {
                     ? "同时返回中文 zh 和英文 en。" : "只返回中文 zh。");
         }
         if (taskType == CopilotTaskType.TAG) {
-            sb.append("\n\n## 标签选择规则\n只能从以下允许标签中选择，可返回一个或多个，没有符合项返回 []，只返回 JSON 数组：\n");
+            sb.append("\n\n## 标签选择规则\n只能从以下允许标签中选择，可返回一个或多个；没有符合项时 stages 返回 []。msg 必须用简短文字说明判定依据；没有匹配标签时也要说明原因。\n");
             Set<String> allowed = allowedTagKeys(req, agent);
             JSONObject tagPrompts = parseTagStagePrompts(agent.getTagStagePrompts());
             if (req != null && req.getTagOptions() != null) {
@@ -502,7 +515,7 @@ public class CopilotRunner {
             case SUMMARIZE -> sb.append("只返回合法 JSON 对象：").append("zh_en".equalsIgnoreCase(agent.getSummarizeLanguage())
                     ? "{\"zh\":\"中文总结\",\"en\":\"英文总结\"}。"
                     : "{\"zh\":\"中文总结\"}。");
-            case TAG -> sb.append("只返回 JSON 数组，例如 [\"ice_breaking\"]，不能返回未允许的标签。");
+            case TAG -> sb.append("只返回合法 JSON 对象：{\"stages\":[\"ice_breaking\"],\"msg\":\"说明标签判定依据；无匹配标签时说明原因\"}。stages 只能包含允许标签。");
         }
         return sb.toString();
     }
