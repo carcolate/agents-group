@@ -30,6 +30,7 @@ import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.output.TokenUsage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -45,8 +46,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -183,7 +186,7 @@ public class CopilotRunner {
             appendStep(uuid, StepRecord.ofThink(StepType.LLM_THINK.getCode(), thinkContent, reasoning));
 
             if (!hasToolCall) {
-                String finalReply = normalizeTaskReply(taskType, thinkText, req, agent);
+                String finalReply = normalizeTaskReply(uuid, taskType, thinkText, req, agent);
                 appendStep(uuid, StepRecord.of(StepType.FINAL_REPLY.getCode(), finalReply));
                 markDone(uuid, finalReply, req, actualModel, llmRoundRef[0], startMs);
                 return;
@@ -234,14 +237,18 @@ public class CopilotRunner {
         AiMessage ai = response == null ? null : response.aiMessage();
         String raw = ai == null || ai.text() == null ? "" : ai.text();
         appendStep(uuid, StepRecord.ofThink(StepType.LLM_THINK.getCode(), raw, safeThinking(ai)));
-        String reply = normalizeTaskReply(taskType, raw, req, agent);
+        if (taskType == CopilotTaskType.SUMMARIZE) {
+            logSummaryDiagnostics(uuid, actualModel, systemPrompt, req, response, raw);
+        }
+        String reply = normalizeTaskReply(uuid, taskType, raw, req, agent);
         appendStep(uuid, StepRecord.of(StepType.FINAL_REPLY.getCode(), reply));
         markDone(uuid, reply, req, actualModel, llmRoundRef[0], startMs);
     }
 
-    private String normalizeTaskReply(CopilotTaskType taskType, String raw, CopilotRequest req, Agent agent) {
+    private String normalizeTaskReply(String uuid, CopilotTaskType taskType, String raw,
+                                      CopilotRequest req, Agent agent) {
         String text = raw == null ? "" : raw.trim();
-        String jsonText = text.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "").trim();
+        String jsonText = stripJsonFence(text);
         try {
             if (taskType == CopilotTaskType.TAG) {
                 JSONArray source;
@@ -292,6 +299,10 @@ public class CopilotRunner {
             }
             return result.toJSONString();
         } catch (Exception e) {
+            if (taskType == CopilotTaskType.SUMMARIZE) {
+                log.warn("[Copilot] uuid={} task={} output JSON normalization failed; raw text will be used as fallback, rawChars={}, errorType={}",
+                        uuid, taskType.getCode(), codePointLength(text), e.getClass().getSimpleName());
+            }
             if (taskType == CopilotTaskType.TAG) {
                 JSONObject reply = new JSONObject();
                 reply.put("stages", new JSONArray());
@@ -307,6 +318,125 @@ public class CopilotRunner {
             else result.put("msg", text);
             return result.toJSONString();
         }
+    }
+
+    private void logSummaryDiagnostics(String uuid, String requestedModel, String systemPrompt,
+                                       CopilotRequest req, ChatResponse response, String raw) {
+        int historyMessageCount = 0;
+        long historyChars = 0;
+        long historyFormatChars = 0;
+        Map<Integer, Integer> historyFormatCodePoints = new TreeMap<>();
+        if (req != null && req.getHistoryMessages() != null) {
+            for (HistoryMessage message : req.getHistoryMessages()) {
+                if (message == null) continue;
+                historyMessageCount++;
+                String content = message.getContent() == null ? "" : message.getContent();
+                historyChars += codePointLength(content);
+                historyFormatChars += countFormatChars(content);
+                appendFormatCodePointCounts(historyFormatCodePoints, content);
+            }
+        }
+
+        String currentMessage = req == null || req.getCurrentMessage() == null ? "" : req.getCurrentMessage();
+        SummaryOutputDiagnostics output = inspectSummaryOutput(raw);
+        TokenUsage usage = response == null ? null : response.tokenUsage();
+        log.info("[Copilot] summary-diagnostics uuid={} requestedModel={} responseModel={} finishReason={} " +
+                        "inputTokens={} outputTokens={} totalTokens={} systemPromptChars={} systemPromptFormatChars={} " +
+                        "historyMessages={} historyChars={} historyFormatChars={} historyFormatCodePoints={} " +
+                        "currentMessageChars={} currentMessageFormatChars={} rawChars={} rawFormatChars={} " +
+                        "rawJsonObject={} hasZh={} zhChars={} zhLooksJson={} hasEn={} enChars={} jsonErrorType={}",
+                uuid,
+                requestedModel,
+                response == null ? null : response.modelName(),
+                response == null ? null : response.finishReason(),
+                usage == null ? null : usage.inputTokenCount(),
+                usage == null ? null : usage.outputTokenCount(),
+                usage == null ? null : usage.totalTokenCount(),
+                codePointLength(systemPrompt),
+                countFormatChars(systemPrompt),
+                historyMessageCount,
+                historyChars,
+                historyFormatChars,
+                formatCodePointSummary(historyFormatCodePoints),
+                codePointLength(currentMessage),
+                countFormatChars(currentMessage),
+                codePointLength(raw),
+                countFormatChars(raw),
+                output.jsonObject(),
+                output.hasZh(),
+                output.zhChars(),
+                output.zhLooksJson(),
+                output.hasEn(),
+                output.enChars(),
+                output.jsonErrorType());
+    }
+
+    private SummaryOutputDiagnostics inspectSummaryOutput(String raw) {
+        try {
+            JSONObject object = JSON.parseObject(stripJsonFence(raw == null ? "" : raw.trim()));
+            if (object == null) {
+                return new SummaryOutputDiagnostics(false, false, false, 0, 0, false, "not_json_object");
+            }
+            String zh = object.getString("zh");
+            String en = object.getString("en");
+            return new SummaryOutputDiagnostics(true, object.containsKey("zh"), object.containsKey("en"),
+                    codePointLength(zh), codePointLength(en), zh != null && zh.stripLeading().startsWith("{"), null);
+        } catch (Exception e) {
+            return new SummaryOutputDiagnostics(false, false, false, 0, 0, false,
+                    e.getClass().getSimpleName());
+        }
+    }
+
+    private String stripJsonFence(String text) {
+        if (text == null) return "";
+        return text.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "").trim();
+    }
+
+    private int codePointLength(String text) {
+        return text == null ? 0 : text.codePointCount(0, text.length());
+    }
+
+    private int countFormatChars(String text) {
+        if (text == null || text.isEmpty()) return 0;
+        int count = 0;
+        for (int offset = 0; offset < text.length();) {
+            int codePoint = text.codePointAt(offset);
+            if (Character.getType(codePoint) == Character.FORMAT) count++;
+            offset += Character.charCount(codePoint);
+        }
+        return count;
+    }
+
+    private void appendFormatCodePointCounts(Map<Integer, Integer> counts, String text) {
+        if (text == null || text.isEmpty()) return;
+        for (int offset = 0; offset < text.length();) {
+            int codePoint = text.codePointAt(offset);
+            if (Character.getType(codePoint) == Character.FORMAT) counts.merge(codePoint, 1, Integer::sum);
+            offset += Character.charCount(codePoint);
+        }
+    }
+
+    private String formatCodePointSummary(Map<Integer, Integer> counts) {
+        if (counts.isEmpty()) return "none";
+        StringBuilder summary = new StringBuilder();
+        int shown = 0;
+        for (Map.Entry<Integer, Integer> entry : counts.entrySet()) {
+            if (shown == 12) {
+                summary.append(",more");
+                break;
+            }
+            if (summary.length() > 0) summary.append(',');
+            String hex = Integer.toHexString(entry.getKey()).toUpperCase(Locale.ROOT);
+            summary.append("U+").append("0".repeat(Math.max(0, 4 - hex.length())))
+                    .append(hex).append(':').append(entry.getValue());
+            shown++;
+        }
+        return summary.toString();
+    }
+
+    private record SummaryOutputDiagnostics(boolean jsonObject, boolean hasZh, boolean hasEn,
+                                            int zhChars, int enChars, boolean zhLooksJson,
+                                            String jsonErrorType) {
     }
 
     private Set<String> allowedTagKeys(CopilotRequest req, Agent agent) {
