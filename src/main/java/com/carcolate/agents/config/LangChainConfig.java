@@ -1,10 +1,12 @@
 package com.carcolate.agents.config;
 
 import dev.langchain4j.data.segment.TextSegment;
+import dev.langchain4j.http.client.jdk.JdkHttpClientBuilder;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.embedding.onnx.allminilml6v2q.AllMiniLmL6V2QuantizedEmbeddingModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+import dev.langchain4j.model.openai.OpenAiResponsesChatModel;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,9 +16,20 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Configuration
 public class LangChainConfig {
+
+    /** Text-capable OpenAI GPT families supported by the Responses API. */
+    private static final Pattern RESPONSES_API_MODEL_PATTERN = Pattern.compile(
+            "(?i)^gpt-(?:3\\.5|4(?:o|\\.\\d+)?|5(?:\\.\\d+)?|6(?:\\.\\d+)?)(?:[-.]|$).*"
+    );
+
+    /** GPT-5 and GPT-6 support opt-in reasoning summaries on the Responses API. */
+    private static final Pattern RESPONSES_REASONING_MODEL_PATTERN = Pattern.compile(
+            "(?i)^gpt-(?:5|6)(?:\\.\\d+)?(?:[-.]|$).*"
+    );
 
     @Value("${copilot.llm.base-url}")
     private String baseUrl;
@@ -71,6 +84,21 @@ public class LangChainConfig {
      */
     public ChatModel buildChatModel(String modelName) {
         String finalModel = (modelName == null || modelName.isBlank()) ? getDefaultModelName() : modelName;
+        if (RESPONSES_API_MODEL_PATTERN.matcher(finalModel).matches()) {
+            OpenAiResponsesChatModel.Builder builder = OpenAiResponsesChatModel.builder()
+                    .baseUrl(baseUrl)
+                    .apiKey(apiKey)
+                    .modelName(finalModel)
+                    .httpClientBuilder(new JdkHttpClientBuilder()
+                            .connectTimeout(Duration.ofSeconds(timeoutSeconds))
+                            .readTimeout(Duration.ofSeconds(timeoutSeconds)))
+                    .logRequests(logRequests)
+                    .logResponses(logResponses);
+            if (returnThinking && RESPONSES_REASONING_MODEL_PATTERN.matcher(finalModel).matches()) {
+                builder.reasoningSummary("auto");
+            }
+            return builder.build();
+        }
         return OpenAiChatModel.builder()
                 .baseUrl(baseUrl)
                 .apiKey(apiKey)
