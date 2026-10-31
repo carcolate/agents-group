@@ -139,6 +139,12 @@
             <artifactId>langchain4j-open-ai</artifactId>
             <version>1.15.0</version>
         </dependency>
+        <!-- JDK HTTP client is runtime-scoped transitively, but its builder is configured directly in LangChainConfig. -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-http-client-jdk</artifactId>
+            <version>1.15.0</version>
+        </dependency>
         <!-- 本地 Embedding 模型（all-MiniLM-L6-v2，量化版，零网络依赖） -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
