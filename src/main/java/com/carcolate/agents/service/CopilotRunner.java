@@ -277,6 +277,9 @@ public class CopilotRunner {
                 reply.put("msg", msg);
                 return reply.toJSONString();
             }
+            if (taskType == CopilotTaskType.EXTRACT) {
+                return normalizeExtractReply(jsonText, req);
+            }
             JSONObject object = jsonText.startsWith("{") ? JSON.parseObject(jsonText) : null;
             if (taskType == CopilotTaskType.CHAT || taskType == CopilotTaskType.REBACK) {
                 String msg = object == null ? text : object.getString("msg");
@@ -307,6 +310,13 @@ public class CopilotRunner {
                 JSONObject reply = new JSONObject();
                 reply.put("stages", new JSONArray());
                 reply.put("msg", "");
+                return reply.toJSONString();
+            }
+            if (taskType == CopilotTaskType.EXTRACT) {
+                log.warn("[Copilot] uuid={} task={} output JSON normalization failed, rawChars={}, errorType={}",
+                        uuid, taskType.getCode(), codePointLength(text), e.getClass().getSimpleName());
+                JSONObject reply = new JSONObject();
+                reply.put("fields", new JSONObject());
                 return reply.toJSONString();
             }
             JSONObject result = new JSONObject();
@@ -466,6 +476,58 @@ public class CopilotRunner {
         return allowed;
     }
 
+    /** 模型有时会用这些占位词表示「没有」，不能当作抽取到的值。 */
+    private static final Set<String> EXTRACT_EMPTY_PLACEHOLDERS =
+            Set.of("null", "none", "n/a", "unknown", "未知", "未提供", "未提及", "不详");
+
+    private String normalizeExtractReply(String jsonText, CopilotRequest req) {
+        JSONObject object = JSON.parseObject(jsonText);
+        JSONObject source = object == null ? null : object.getJSONObject("fields");
+        Set<String> allowed = allowedExtractKeys(req);
+        JSONObject fields = new JSONObject();
+        if (source != null) {
+            for (Map.Entry<String, Object> entry : source.entrySet()) {
+                String key = entry.getKey() == null ? "" : entry.getKey().trim();
+                if (!allowed.contains(key)) continue;
+                String value = extractValueText(entry.getValue());
+                if (!value.isEmpty()) fields.put(key, value);
+            }
+        }
+        JSONObject reply = new JSONObject();
+        reply.put("fields", fields);
+        return reply.toJSONString();
+    }
+
+    private Set<String> allowedExtractKeys(CopilotRequest req) {
+        Set<String> allowed = new LinkedHashSet<>();
+        if (req != null && req.getExtractOptions() != null) {
+            for (CopilotRequest.ExtractOption option : req.getExtractOptions()) {
+                if (option != null && option.getKey() != null && !option.getKey().isBlank()) {
+                    allowed.add(option.getKey().trim());
+                }
+            }
+        }
+        return allowed;
+    }
+
+    private String extractValueText(Object value) {
+        if (value == null) return "";
+        String text;
+        if (value instanceof JSONArray) {
+            List<String> parts = new ArrayList<>();
+            for (Object item : (JSONArray) value) {
+                String part = item == null ? "" : String.valueOf(item).trim();
+                if (!part.isEmpty()) parts.add(part);
+            }
+            text = String.join("、", parts);
+        } else if (value instanceof Map) {
+            text = JSON.toJSONString(value);
+        } else {
+            text = String.valueOf(value).trim();
+        }
+        return EXTRACT_EMPTY_PLACEHOLDERS.contains(text.toLowerCase(Locale.ROOT)) ? "" : text;
+    }
+
     /**
      * 遍历 historyMessages，对每条含 image 的记录单独下载图片并注入为多模态 UserMessage。
      * <ul>
@@ -562,6 +624,7 @@ public class CopilotRunner {
                     ? "压缩以下历史对话，只保留未来继续沟通所需的信息：客户身份、车型、预算、需求、痛点、异议、承诺、预约信息和未完成事项。不要编造，不要输出分析过程。"
                     : agent.getCompactPrompt();
             case SUMMARIZE -> agent.getSummarizePrompt();
+            case EXTRACT -> agent.getExtractPrompt();
             case TAG -> null;
         };
         if (taskPrompt != null && !taskPrompt.isBlank()) {
@@ -592,6 +655,25 @@ public class CopilotRunner {
                 allowed.forEach(x -> sb.append("- ").append(x).append("\n")
                         .append("  允许条件：").append(tagPrompts.getString(x) == null
                                 ? "未配置条件，不能仅凭模糊意向标记。" : tagPrompts.getString(x)).append("\n"));
+            }
+        }
+
+        if (taskType == CopilotTaskType.EXTRACT) {
+            sb.append("\n\n## 信息抽取规则\n")
+                    .append("只能抽取下列字段。信息必须来自客户本人在对话中明确说出的内容（客户转述，或客服复述后经客户确认，也算）；")
+                    .append("不得猜测、推断或编造；客服自己的姓名、电话、公司信息不属于客户信息。")
+                    .append("没有明确信息的字段不要返回，不要返回空字符串、null 或“未知”。")
+                    .append("同一字段多次出现时，以客户最新、最明确的说法为准。\n");
+            if (req != null && req.getExtractOptions() != null) {
+                for (CopilotRequest.ExtractOption option : req.getExtractOptions()) {
+                    if (option == null || option.getKey() == null || option.getKey().isBlank()) continue;
+                    sb.append("- ").append(option.getKey().trim()).append("：")
+                            .append(option.getNameCn() == null ? "" : option.getNameCn()).append(" ")
+                            .append(option.getNameEn() == null ? "" : option.getNameEn()).append("\n");
+                    if (option.getDescription() != null && !option.getDescription().isBlank()) {
+                        sb.append("  抽取说明：").append(option.getDescription().trim()).append("\n");
+                    }
+                }
             }
         }
 
@@ -646,6 +728,7 @@ public class CopilotRunner {
                     ? "{\"zh\":\"中文总结\",\"en\":\"英文总结\"}。"
                     : "{\"zh\":\"中文总结\"}。");
             case TAG -> sb.append("只返回合法 JSON 对象：{\"stages\":[\"ice_breaking\"],\"msg\":\"说明标签判定依据；无匹配标签时说明原因\"}。stages 只能包含允许标签。");
+            case EXTRACT -> sb.append("只返回合法 JSON 对象：{\"fields\":{\"字段key\":\"抽取到的值\"}}。fields 只能包含允许的字段 key，值必须是字符串；没有任何可抽取信息时返回 {\"fields\":{}}。");
         }
         return sb.toString();
     }

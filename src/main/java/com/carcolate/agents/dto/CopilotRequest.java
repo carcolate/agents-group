@@ -44,10 +44,22 @@ public class CopilotRequest {
     /** tag 任务使用的当前 IM 标签定义；只允许返回其中的 key。 */
     private List<TagOption> tagOptions;
 
+    /** extract 任务使用的待抽取字段定义；只允许返回其中的 key。 */
+    private List<ExtractOption> extractOptions;
+
     @Data
     public static class TagOption {
         private String key;
         private String nameCn;
         private String nameEn;
+    }
+
+    @Data
+    public static class ExtractOption {
+        private String key;
+        private String nameCn;
+        private String nameEn;
+        /** 该字段的抽取说明：告诉模型什么样的内容算该字段的值。 */
+        private String description;
     }
 }

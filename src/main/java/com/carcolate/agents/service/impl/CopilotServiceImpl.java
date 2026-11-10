@@ -44,6 +44,10 @@ public class CopilotServiceImpl implements CopilotService {
         if (request == null || request.getAgentId() == null) {
             throw new IllegalArgumentException("agentId 必填");
         }
+        if (taskType == CopilotTaskType.EXTRACT
+                && (request.getExtractOptions() == null || request.getExtractOptions().isEmpty())) {
+            throw new IllegalArgumentException("extract 任务必须提供 extractOptions");
+        }
         Agent agent = agentService.getById(request.getAgentId());
         if (agent == null || agent.getStatus() == null || agent.getStatus() != 1) {
             throw new IllegalStateException("Agent 不存在或已禁用");

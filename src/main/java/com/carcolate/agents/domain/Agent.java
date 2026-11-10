@@ -47,6 +47,9 @@ public class Agent implements Serializable {
     /** 客户信息总结语言：zh / zh_en。 */
     private String summarizeLanguage;
 
+    /** 客户信息提取 Prompt。 */
+    private String extractPrompt;
+
     /** 允许 tag 任务输出的 tb_stage key JSON 数组。 */
     private String tagStageKeys;
 

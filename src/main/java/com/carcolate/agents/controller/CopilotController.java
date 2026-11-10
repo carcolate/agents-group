@@ -129,6 +129,11 @@ public class CopilotController {
         return submit(CopilotTaskType.TAG, request);
     }
 
+    @PostMapping("extract")
+    public Rsp<Map<String, String>> extract(@RequestBody CopilotRequest request) {
+        return submit(CopilotTaskType.EXTRACT, request);
+    }
+
     private Rsp<Map<String, String>> submit(CopilotTaskType taskType, CopilotRequest request) {
         try {
             String uuid = copilotService.submit(taskType, request);

@@ -16,6 +16,7 @@ CREATE TABLE `tb_agent` (
   `compact_prompt` MEDIUMTEXT NULL COMMENT '会话压缩 Prompt，为空使用系统默认值',
   `summarize_prompt` MEDIUMTEXT NULL COMMENT '客户信息总结 Prompt',
   `summarize_language` VARCHAR(16) NOT NULL DEFAULT 'zh' COMMENT '总结语言：zh / zh_en',
+  `extract_prompt` MEDIUMTEXT NULL COMMENT '客户信息提取 Prompt',
   `tag_stage_keys` TEXT NULL COMMENT '允许输出的 tb_stage key JSON 数组',
   `tag_stage_prompts` TEXT NULL COMMENT '各 tb_stage 的条件 Prompt JSON 对象',
   `other_param_keys` VARCHAR(1024) NULL COMMENT '动态参数 Key 列表',

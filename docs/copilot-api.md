@@ -58,6 +58,7 @@
 | POST | /copilot/compact | 会话压缩 | 仅压缩 Prompt（compactPrompt）；为空使用默认 Prompt | 不使用 |
 | POST | /copilot/summarize | 客户信息总结 | 仅总结 Prompt（summarizePrompt） | 不使用 |
 | POST | /copilot/tag | 客户标签判断 | 仅系统生成的标签规则和标签条件 | 不使用 |
+| POST | /copilot/extract | 客户信息提取 | 提取 Prompt（extractPrompt）+ 系统根据 extractOptions 生成的字段规则 | 不使用 |
 | GET | /copilot/result?uuid={uuid} | 通用任务结果查询 | - | - |
 | GET | /copilot/chat/result?uuid={uuid} | 结果查询兼容路径 | - | - |
 | POST | /copilot/chat/cancel?uuid={uuid} | 请求中断任务 | - | - |
@@ -73,6 +74,7 @@
 | compact | compactPrompt；为空时使用系统默认压缩 Prompt |
 | summarize | summarizePrompt |
 | tag | 根据 Agent 勾选标签和每个标签的条件自动生成，不读取 prePrompt |
+| extract | extractPrompt；系统再根据请求 extractOptions 生成字段规则（key、名称、抽取说明） |
 
 公共上下文（请求中的历史摘要、历史消息、客户信息）仍会按任务注入。responseFormat 仅为历史兼容字段，运行时不读取；系统会根据任务类型追加固定输出格式。
 
@@ -83,21 +85,22 @@
 - 异步任务开始后，先检查并执行启用文档的 URL 自动刷新，再构建 Prompt。
 - engageType=1 的文档进入知识库目录，并可通过检索工具按需读取。
 - engageType=2 的文档全文注入前置知识库。
-- compact、summarize、tag 不读取知识库、不注入知识库、不触发 URL 自动刷新，也不会收到 RAG 工具。
+- compact、summarize、tag、extract 不读取知识库、不注入知识库、不触发 URL 自动刷新，也不会收到 RAG 工具。
 
 ## 3. Copilot 请求体
 
-五类提交接口共用 CopilotRequest。
+六类提交接口共用 CopilotRequest。
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | agentId | Long | 是 | 已启用 Agent 的 ID |
 | userId | String | 否 | 调用方用户标识，仅写入调用历史，不参与 Prompt |
-| currentMessage | String | 否 | 当前消息。chat/reback 建议提供；compact/summarize/tag 可以只依赖历史消息 |
+| currentMessage | String | 否 | 当前消息。chat/reback 建议提供；compact/summarize/tag/extract 可以只依赖历史消息 |
 | historyMessages | List<HistoryMessage> | 否 | 历史消息，建议按时间正序提交 |
 | historySummary | String | 否 | 更早历史消息的压缩摘要 |
 | otherParams | Map<String,Object> | 否 | 客户或业务参数，也会作为客户信息注入 Prompt |
 | tagOptions | List<TagOption> | 仅 tag 使用 | 当前 IM 允许使用的标签定义 |
+| extractOptions | List<ExtractOption> | 仅 extract 使用，且必填 | 当前账号允许抽取的字段定义：key、nameCn、nameEn、description（抽取说明）；缺失或为空时提交返回 400 |
 
 服务端当前只强制校验 agentId 存在且对应 Agent 已启用；空的 currentMessage 不会在提交阶段被拒绝。
 
@@ -212,6 +215,7 @@ task 取值：
 | /copilot/summarize，语言为 zh | {"zh":"中文客户信息总结"} |
 | /copilot/summarize，语言为 zh_en | {"zh":"中文客户信息总结","en":"English customer summary"} |
 | /copilot/tag | {"stages":["stage_key_1","stage_key_2"],"msg":"标签判定理由"}；没有匹配项时 stages 为 []，msg 仍需说明原因 |
+| /copilot/extract | {"fields":{"customer_name":"张三","budget":"30万"}}；只包含抽取到的字段，没有抽取到任何信息时 fields 为 {} |
 
 示例：
 
@@ -223,7 +227,7 @@ task 取值：
 }
 ~~~
 
-不要把 finalReply 直接当作客服消息文本使用；chat/reback 应先解析 msg，compact 解析 rsp，summarize 解析 zh/en，tag 解析 JSON 数组。
+不要把 finalReply 直接当作客服消息文本使用；chat/reback 应先解析 msg，compact 解析 rsp，summarize 解析 zh/en，tag 解析 JSON 数组，extract 解析 fields 对象。
 
 ### 4.4 各功能返回示例
 
@@ -274,11 +278,19 @@ task 取值：
 
 AgentGroup 会对模型返回的标签再次过滤，只保留当前 Agent 允许、且请求 tagOptions 允许的标签。
 
+#### extract
+
+~~~json
+{"fields":{"customer_name":"张三","customer_phone_number":"13800138000","budget":"30万"}}
+~~~
+
+AgentGroup 会对模型返回的字段再次过滤：只保留请求 extractOptions 中声明的 key，值统一规整为字符串，并丢弃空值和“未知、null”等占位值；没有抽取到任何信息时返回 `{"fields":{}}`。
+
 ### 4.5 提交错误
 
 | code | msg | 说明 |
 |---:|---|---|
-| 400 | 参数错误 | 请求为空或 agentId 缺失 |
+| 400 | 参数错误 | 请求为空、agentId 缺失，或 extract 任务缺少 extractOptions |
 | 600 | Agent不存在或已禁用 | Agent 不存在或 status != 1 |
 | 500004 | 业务异常：{详情} | 提交阶段发生其他服务异常；异步运行异常请查看任务的 errorMsg |
 

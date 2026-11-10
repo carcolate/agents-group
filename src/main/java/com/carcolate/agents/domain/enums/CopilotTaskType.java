@@ -9,7 +9,8 @@ public enum CopilotTaskType {
     REBACK("reback"),
     COMPACT("compact"),
     SUMMARIZE("summarize"),
-    TAG("tag");
+    TAG("tag"),
+    EXTRACT("extract");
 
     private final String code;
 
