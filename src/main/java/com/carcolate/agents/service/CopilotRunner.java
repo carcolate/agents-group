@@ -129,7 +129,7 @@ public class CopilotRunner {
         }
         String systemPrompt = switch (taskType) {
             case CHAT -> buildChatSystemPrompt(agent, req);
-            case SUMMARIZE -> buildSummarySystemPrompt(agent, req);
+            case SUMMARIZE -> buildSummarySystemPrompt(agent);
             case GENERATE -> generation.systemPrompt();
         };
         TaskSnapshot snap = load(uuid);
@@ -421,12 +421,9 @@ public class CopilotRunner {
         return sb.toString();
     }
 
-    private String buildSummarySystemPrompt(Agent agent, CopilotRequest req) {
-        String prompt = renderPromptVars(agent.getSummarizePrompt(), agent, req);
-        if (prompt == null || prompt.isBlank()) {
-            prompt = "根据对话中明确出现的信息，总结客户需求、沟通进展和待跟进事项。";
-        }
-        return prompt + "\n\n只返回合法 JSON 对象：" + (isBilingualSummary(agent)
+    private String buildSummarySystemPrompt(Agent agent) {
+        return "根据对话中明确出现的信息，总结客户需求、沟通进展和待跟进事项。\n\n"
+                + "只返回合法 JSON 对象：" + (isBilingualSummary(agent)
                 ? "{\"zh\":\"中文总结\",\"en\":\"英文总结\"}。同时生成中文和英文。"
                 : "{\"zh\":\"中文总结\"}。只生成中文。");
     }

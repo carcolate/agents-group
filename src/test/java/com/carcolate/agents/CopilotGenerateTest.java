@@ -83,12 +83,12 @@ class CopilotGenerateTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"zh", "zh_en"})
-    void summarizeUsesItsOwnPromptAndReturnsConfiguredLanguages(String language) {
+    void summarizeUsesTheBuiltInPromptAndReturnsConfiguredLanguages(String language) {
         RunResult result = run(CopilotTaskType.SUMMARIZE,
                 "```json\n{\"zh\":\"想试驾\",\"en\":\"Requests a test drive\",\"unrelated\":\"extra\"}\n```", language);
         var messages = result.request().messages();
         String system = ((SystemMessage) messages.getFirst()).text();
-        assertTrue(system.contains("总结 MA 客户"));
+        assertTrue(system.contains("根据对话中明确出现的信息，总结客户需求、沟通进展和待跟进事项。"));
         assertFalse(system.contains("unrelated chat instruction"));
         assertTrue(((UserMessage) messages.getLast()).singleText().contains("想预约试驾"));
         assertEquals("SUCCESS", result.snapshot().getStatus());
@@ -134,7 +134,6 @@ class CopilotGenerateTest {
         agent.setId(12L);
         agent.setModelName("test-model");
         agent.setPrePrompt("unrelated chat instruction");
-        agent.setSummarizePrompt("总结 {{userArea}} 客户");
         agent.setOtherParamKeys("userArea");
         agent.setSummarizeLanguage(language);
         CopilotRequest context = new CopilotRequest();

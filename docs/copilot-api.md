@@ -54,7 +54,7 @@
 | 方法 | 路径 | 功能 | 使用的 Prompt | 知识库 |
 |---|---|---|---|---|
 | POST | /copilot/chat | 实时回复 | 仅主 Prompt（prePrompt） | 支持 |
-| POST | /copilot/summarize | 客户信息总结 | Agent 的 summarizePrompt，按 summarizeLanguage 输出 | 不使用 |
+| POST | /copilot/summarize | 客户信息总结 | 服务端内置总结 Prompt，按 summarizeLanguage 输出 | 不使用 |
 | POST | /copilot/generate | 单次模型生成 | 调用方传入系统和用户 Prompt | 不使用 |
 | GET | /copilot/result?uuid={uuid} | 通用任务结果查询 | - | - |
 | GET | /copilot/chat/result?uuid={uuid} | 结果查询兼容路径 | - | - |
@@ -64,7 +64,7 @@
 
 `chat` 使用 Agent 的主 Prompt，并从历史摘要、历史消息和客户参数构建会话上下文。AgentGroup 会检查启用文档的 URL 刷新。engageType=1 的文档按需检索，engageType=2 的文档全文注入。
 
-`summarize` 使用 Agent 的总结 Prompt 和历史对话进行单次模型调用。summarizeLanguage 为 zh_en 时返回中英双语，其余返回中文。
+`summarize` 使用内置总结 Prompt 和历史对话进行单次模型调用。summarizeLanguage 为 zh_en 时返回中英双语，其余返回中文。
 
 `generate` 通过 agentId 选择启用的 Agent 和对应模型，只发起一次模型调用。调用方负责拼装上下文、约定输出格式并校验结果。AgentGroup 直接使用传入的 Prompt 和可选图片，返回模型文本。知识库和工具由 `chat` 使用。
 
@@ -205,7 +205,11 @@ Content-Type: application/json
 | summarize | JSON 字符串，中文为 `{"zh":"中文总结"}`，双语为 `{"zh":"中文总结","en":"English summary"}`。缺少配置语言的非空文本时，任务状态为 FAILED |
 | generate | 模型返回的原始文本。若调用方要求 JSON，由调用方校验并解析 |
 
-Carcolate-IM 的会话压缩、标签判断和资料提取共用 `generate`。IM 为各任务生成输出指令。标签的判定条件在 IM 标签管理维护，Agent 配置负责选择参与判断的标签。
+Carcolate-IM 的会话压缩、客户信息总结、标签判断和资料提取共用 `generate`。IM 为各任务生成输出指令。IM 根据客户平台账号所属的业务模型读取允许 Copilot 管理且有判定条件的标签。标签 Agent 负责选择模型。
+
+Carcolate-IM 的客户信息总结使用 IM 内置 Prompt，要求模型同时返回非空的 zh 和 en，由 IM 写入现有的中英文总结字段。
+
+会话压缩要求模型返回 `{"rsp":"压缩后的会话摘要"}`。IM 将 rsp 用作后续对话的内部上下文。
 
 AgentGroup 和 IM 后端需在同一次发布中更新。标签判定读取 IM 的 tb_stage.copilot_prompt。未填写条件的标签会跳过自动判定。
 
@@ -445,10 +449,9 @@ Agent 管理请求和响应使用以下字段：
 | name | String | 新增必填；更新后不能为空 | Agent 名称 |
 | prePrompt | String | 新增必填；更新后不能为空 | chat 专用主 Prompt |
 | responseFormat | String | 可选 | 历史兼容字段，运行时不读取 |
-| compactPrompt | String | 可选 | 历史配置字段。IM 的会话压缩使用内置 Prompt |
-| summarizePrompt | String | 可选 | summarize 专用 Prompt |
+| compactPrompt | String | 可选 | 会话压缩 Prompt。IM 读取后组装 generate 请求，留空时使用默认压缩 Prompt |
 | summarizeLanguage | String | 可选 | zh 或 zh_en，新增时默认 zh |
-| tagStageKeys | String | 可选 | JSON 数组字符串，例如 ["invite_visit","deal_closed"] |
+| tagStageKeys | String | 可选 | 历史配置字段。IM 根据业务模型选择标签 |
 | otherParamKeys | String | 可选 | 逗号分隔的动态参数 key |
 | modelName | String | 可选 | Agent 专用模型；为空使用全局默认模型 |
 | maxSteps | int | 可选 | 1-20；新增时为空或非正数默认 6，主要用于 chat |
@@ -470,9 +473,7 @@ Content-Type: application/json
 {
   "name": "海外招商顾问",
   "prePrompt": "你是专业的海外招商顾问，负责引导合作商户。",
-  "summarizePrompt": "总结客户画像和当前合作状态，只使用对话中明确出现的信息。",
   "summarizeLanguage": "zh_en",
-  "tagStageKeys": "[\"have_room\",\"invite_meet\",\"invite_visit\"]",
   "otherParamKeys": "userArea,customerType",
   "modelName": "qwen3.6-plus",
   "maxSteps": 6,
@@ -480,8 +481,6 @@ Content-Type: application/json
   "remark": "海外招商场景"
 }
 ~~~
-
-tagStageKeys 是 Agent 表中的字符串字段，请求中传入序列化后的 JSON 数组字符串。
 
 ### 7.5 Agent 更新、删除
 

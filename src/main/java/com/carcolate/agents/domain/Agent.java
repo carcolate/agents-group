@@ -38,9 +38,6 @@ public class Agent implements Serializable {
     /** 会话压缩 Prompt；为空时使用系统默认值。 */
     private String compactPrompt;
 
-    /** 客户信息总结 Prompt。 */
-    private String summarizePrompt;
-
     /** 客户信息总结语言：zh / zh_en。 */
     private String summarizeLanguage;
 
