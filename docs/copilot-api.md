@@ -448,10 +448,8 @@ Agent 管理请求和响应使用以下字段：
 | id | Long | 更新必填 | 新增时由服务端生成 |
 | name | String | 新增必填；更新后不能为空 | Agent 名称 |
 | prePrompt | String | 新增必填；更新后不能为空 | chat 专用主 Prompt |
-| responseFormat | String | 可选 | 历史兼容字段，运行时不读取 |
 | compactPrompt | String | 可选 | 会话压缩 Prompt。IM 读取后组装 generate 请求，留空时使用默认压缩 Prompt |
 | summarizeLanguage | String | 可选 | zh 或 zh_en，新增时默认 zh |
-| tagStageKeys | String | 可选 | 历史配置字段。IM 根据业务模型选择标签 |
 | otherParamKeys | String | 可选 | 逗号分隔的动态参数 key |
 | modelName | String | 可选 | Agent 专用模型；为空使用全局默认模型 |
 | maxSteps | int | 可选 | 1-20；新增时为空或非正数默认 6，主要用于 chat |

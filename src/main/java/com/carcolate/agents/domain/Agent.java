@@ -29,12 +29,6 @@ public class Agent implements Serializable {
      */
     private String prePrompt;
 
-    /**
-     * 回复格式约束：用于要求 LLM 最终输出的回复格式，
-     * 自动拼接到前置 Prompt 的后面，参与主 Agent 决策
-     */
-    private String responseFormat;
-
     /** 会话压缩 Prompt；为空时使用系统默认值。 */
     private String compactPrompt;
 
@@ -43,9 +37,6 @@ public class Agent implements Serializable {
 
     /** 客户信息提取 Prompt。 */
     private String extractPrompt;
-
-    /** 允许 tag 任务输出的 tb_stage key JSON 数组。 */
-    private String tagStageKeys;
 
     /**
      * 额外参数Key列表，英文逗号分隔，如：uuid,user.age
