@@ -35,9 +35,6 @@ public class Agent implements Serializable {
      */
     private String responseFormat;
 
-    /** 客户回访专用 Prompt。 */
-    private String rebackPrompt;
-
     /** 会话压缩 Prompt；为空时使用系统默认值。 */
     private String compactPrompt;
 
@@ -52,9 +49,6 @@ public class Agent implements Serializable {
 
     /** 允许 tag 任务输出的 tb_stage key JSON 数组。 */
     private String tagStageKeys;
-
-    /** 每个允许标签的条件 Prompt，JSON 对象：{ "invite_visit": "..." }。 */
-    private String tagStagePrompts;
 
     /**
      * 额外参数Key列表，英文逗号分隔，如：uuid,user.age

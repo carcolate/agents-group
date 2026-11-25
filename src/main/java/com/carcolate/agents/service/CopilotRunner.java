@@ -1,16 +1,16 @@
 package com.carcolate.agents.service;
 
 import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.carcolate.agents.config.LangChainConfig;
 import com.carcolate.agents.domain.Agent;
 import com.carcolate.agents.domain.RagBase;
+import com.carcolate.agents.domain.enums.CopilotTaskType;
 import com.carcolate.agents.domain.enums.StepType;
 import com.carcolate.agents.domain.enums.TaskStatus;
-import com.carcolate.agents.domain.enums.CopilotTaskType;
 import com.carcolate.agents.dto.CopilotRequest;
+import com.carcolate.agents.dto.GenerateRequest;
 import com.carcolate.agents.dto.HistoryMessage;
 import com.carcolate.agents.dto.StepRecord;
 import com.carcolate.agents.dto.TaskSnapshot;
@@ -30,7 +30,6 @@ import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
-import dev.langchain4j.model.output.TokenUsage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,13 +42,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -87,8 +81,7 @@ public class CopilotRunner {
     private long ttlSeconds;
 
     @Async("copilotExecutor")
-    public void run(String uuid, Agent agent, CopilotRequest req, CopilotTaskType taskType) {
-        if (taskType == null) taskType = CopilotTaskType.CHAT;
+    public void run(String uuid, Agent agent, CopilotRequest req, CopilotTaskType taskType, GenerateRequest generation) {
         long startMs = System.currentTimeMillis();
         int[] llmRoundRef = new int[]{0};
         // 提前解析"实际调用的模型名"，落历史时一并存
@@ -100,7 +93,7 @@ public class CopilotRunner {
             save(initSnap);
         }
         try {
-            doRun(uuid, agent, req, taskType, actualModel, startMs, llmRoundRef);
+            doRun(uuid, agent, req, taskType, generation, actualModel, startMs, llmRoundRef);
         } catch (Exception e) {
             log.error("[Copilot] uuid={} 执行异常", uuid, e);
             TaskSnapshot snap = load(uuid);
@@ -129,21 +122,23 @@ public class CopilotRunner {
         }
     }
 
-    private void doRun(String uuid, Agent agent, CopilotRequest req, CopilotTaskType taskType, String actualModel,
-                       long startMs, int[] llmRoundRef) {
-        // 只有实时回复和客户回访可以使用知识库；其他功能不读取、也不刷新知识库。
-        if (supportsKnowledgeBase(taskType)) {
-            // 刷新属于 Copilot 异步任务的一部分，完成后才读取知识库并开始模型调用。
+    private void doRun(String uuid, Agent agent, CopilotRequest req, CopilotTaskType taskType,
+                       GenerateRequest generation, String actualModel, long startMs, int[] llmRoundRef) {
+        if (taskType == CopilotTaskType.CHAT) {
             ragRefreshService.refreshForAgent(agent.getId());
         }
-        String systemPrompt = buildSystemPrompt(agent, req, taskType);
+        String systemPrompt = switch (taskType) {
+            case CHAT -> buildChatSystemPrompt(agent, req);
+            case SUMMARIZE -> buildSummarySystemPrompt(agent, req);
+            case GENERATE -> generation.systemPrompt();
+        };
         TaskSnapshot snap = load(uuid);
         if (snap != null) {
             snap.setSystemPrompt(systemPrompt);
             save(snap);
         }
-        if (taskType != CopilotTaskType.CHAT && taskType != CopilotTaskType.REBACK) {
-            runSingleCall(uuid, agent, req, taskType, actualModel, startMs, llmRoundRef, systemPrompt);
+        if (taskType != CopilotTaskType.CHAT) {
+            runSingleCall(uuid, agent, req, generation, systemPrompt, actualModel, startMs, llmRoundRef);
             return;
         }
 
@@ -186,7 +181,7 @@ public class CopilotRunner {
             appendStep(uuid, StepRecord.ofThink(StepType.LLM_THINK.getCode(), thinkContent, reasoning));
 
             if (!hasToolCall) {
-                String finalReply = normalizeTaskReply(uuid, taskType, thinkText, req, agent);
+                String finalReply = normalizeChatReply(thinkText);
                 appendStep(uuid, StepRecord.of(StepType.FINAL_REPLY.getCode(), finalReply));
                 markDone(uuid, finalReply, req, actualModel, llmRoundRef[0], startMs);
                 return;
@@ -220,319 +215,99 @@ public class CopilotRunner {
                 req, actualModel, llmRoundRef[0], startMs);
     }
 
-    /** compact/summarize/tag 使用单次模型调用，仍然复用同一个异步任务快照。 */
-    private void runSingleCall(String uuid, Agent agent, CopilotRequest req, CopilotTaskType taskType,
-                               String actualModel, long startMs, int[] llmRoundRef, String systemPrompt) {
+    private void runSingleCall(String uuid, Agent agent, CopilotRequest context, GenerateRequest generation,
+                               String systemPrompt, String actualModel, long startMs, int[] llmRoundRef) {
+        if (isCancelled(uuid)) {
+            markCancelled(uuid, "用户主动中断", context, actualModel, 0, startMs);
+            return;
+        }
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(SystemMessage.from(systemPrompt));
-        appendHistoryImageMessages(uuid, req, messages);
-        String input = req == null || req.getCurrentMessage() == null ? "" : req.getCurrentMessage();
-        if (input.isBlank() && req != null && req.getHistoryMessages() != null) {
-            input = "请根据上方任务要求处理历史对话。";
+        if (generation == null) {
+            appendHistoryImageMessages(uuid, context, messages);
+            StringBuilder userPrompt = new StringBuilder();
+            appendConversationContext(userPrompt, context);
+            String current = context.getCurrentMessage();
+            userPrompt.append("\n\n## 当前任务\n")
+                    .append(current == null || current.isBlank() ? "请根据历史对话生成客户信息总结。" : current);
+            messages.add(UserMessage.from(userPrompt.toString().strip()));
+        } else {
+            if (generation.attachments() != null) {
+                for (GenerateRequest.Attachment attachment : generation.attachments()) {
+                    if (attachment == null || attachment.url() == null || attachment.url().isBlank()) continue;
+                    String caption = attachment.caption();
+                    appendImageMessage(uuid, attachment.url(),
+                            caption == null || caption.isBlank() ? "（图片）" : caption, messages);
+                }
+            }
+            messages.add(UserMessage.from(generation.userPrompt()));
         }
-        messages.add(UserMessage.from(input));
+        if (isCancelled(uuid)) {
+            markCancelled(uuid, "用户主动中断", context, actualModel, 0, startMs);
+            return;
+        }
         ChatModel chatModel = langChainConfig.buildChatModel(agent.getModelName());
         llmRoundRef[0]++;
         ChatResponse response = chatModel.chat(ChatRequest.builder().messages(messages).build());
-        AiMessage ai = response == null ? null : response.aiMessage();
-        String raw = ai == null || ai.text() == null ? "" : ai.text();
-        appendStep(uuid, StepRecord.ofThink(StepType.LLM_THINK.getCode(), raw, safeThinking(ai)));
-        if (taskType == CopilotTaskType.SUMMARIZE) {
-            logSummaryDiagnostics(uuid, actualModel, systemPrompt, req, response, raw);
+        if (isCancelled(uuid)) {
+            markCancelled(uuid, "用户主动中断", context, actualModel, llmRoundRef[0], startMs);
+            return;
         }
-        String reply = normalizeTaskReply(uuid, taskType, raw, req, agent);
+        AiMessage ai = response == null ? null : response.aiMessage();
+        String raw = ai == null ? null : ai.text();
+        if (raw == null || raw.isBlank()) {
+            markFailed(uuid, "模型未返回文本", context, actualModel, llmRoundRef[0], startMs);
+            return;
+        }
+        appendStep(uuid, StepRecord.ofThink(StepType.LLM_THINK.getCode(), raw, safeThinking(ai)));
+        String reply = generation == null ? normalizeSummaryReply(raw, isBilingualSummary(agent)) : raw;
+        if (reply == null) {
+            markFailed(uuid, "客户信息总结返回格式无效", context, actualModel, llmRoundRef[0], startMs);
+            return;
+        }
         appendStep(uuid, StepRecord.of(StepType.FINAL_REPLY.getCode(), reply));
-        markDone(uuid, reply, req, actualModel, llmRoundRef[0], startMs);
+        markDone(uuid, reply, context, actualModel, llmRoundRef[0], startMs);
     }
 
-    private String normalizeTaskReply(String uuid, CopilotTaskType taskType, String raw,
-                                      CopilotRequest req, Agent agent) {
+    private String normalizeChatReply(String raw) {
         String text = raw == null ? "" : raw.trim();
         String jsonText = stripJsonFence(text);
+        String msg = text;
         try {
-            if (taskType == CopilotTaskType.TAG) {
-                JSONArray source;
-                String msg = "";
-                if (jsonText.startsWith("[")) {
-                    source = JSON.parseArray(jsonText);
-                } else {
-                    JSONObject object = JSON.parseObject(jsonText);
-                    Object value = object == null ? null : object.get("stages");
-                    if (value == null && object != null) value = object.get("tags");
-                    source = value instanceof JSONArray ? (JSONArray) value : JSON.parseArray(String.valueOf(value));
-                    if (object != null && object.get("msg") != null) {
-                        msg = String.valueOf(object.get("msg")).trim();
-                    }
-                }
-                Set<String> allowed = allowedTagKeys(req, agent);
-                Set<String> result = new LinkedHashSet<>();
-                if (source != null) {
-                    for (Object value : source) {
-                        String key = String.valueOf(value).trim();
-                        if (allowed.contains(key)) result.add(key);
-                    }
-                }
-                JSONObject reply = new JSONObject();
-                reply.put("stages", result);
-                reply.put("msg", msg);
-                return reply.toJSONString();
-            }
-            if (taskType == CopilotTaskType.EXTRACT) {
-                return normalizeExtractReply(jsonText, req);
-            }
             JSONObject object = jsonText.startsWith("{") ? JSON.parseObject(jsonText) : null;
-            if (taskType == CopilotTaskType.CHAT || taskType == CopilotTaskType.REBACK) {
-                String msg = object == null ? text : object.getString("msg");
-                JSONObject result = new JSONObject();
-                result.put("msg", msg == null ? "" : msg);
-                return result.toJSONString();
-            }
-            if (taskType == CopilotTaskType.COMPACT) {
-                String rsp = object == null ? text : object.getString("rsp");
-                JSONObject result = new JSONObject();
-                result.put("rsp", rsp == null ? "" : rsp);
-                return result.toJSONString();
-            }
-            JSONObject result = new JSONObject();
-            String zh = object == null ? text : object.getString("zh");
-            result.put("zh", zh == null ? "" : zh);
-            if ("zh_en".equalsIgnoreCase(agent.getSummarizeLanguage())) {
-                String en = object == null ? "" : object.getString("en");
-                result.put("en", en == null ? "" : en);
-            }
-            return result.toJSONString();
-        } catch (Exception e) {
-            if (taskType == CopilotTaskType.SUMMARIZE) {
-                log.warn("[Copilot] uuid={} task={} output JSON normalization failed; raw text will be used as fallback, rawChars={}, errorType={}",
-                        uuid, taskType.getCode(), codePointLength(text), e.getClass().getSimpleName());
-            }
-            if (taskType == CopilotTaskType.TAG) {
-                JSONObject reply = new JSONObject();
-                reply.put("stages", new JSONArray());
-                reply.put("msg", "");
-                return reply.toJSONString();
-            }
-            if (taskType == CopilotTaskType.EXTRACT) {
-                log.warn("[Copilot] uuid={} task={} output JSON normalization failed, rawChars={}, errorType={}",
-                        uuid, taskType.getCode(), codePointLength(text), e.getClass().getSimpleName());
-                JSONObject reply = new JSONObject();
-                reply.put("fields", new JSONObject());
-                return reply.toJSONString();
-            }
-            JSONObject result = new JSONObject();
-            if (taskType == CopilotTaskType.COMPACT) result.put("rsp", text);
-            else if (taskType == CopilotTaskType.SUMMARIZE) {
-                result.put("zh", text);
-                if ("zh_en".equalsIgnoreCase(agent.getSummarizeLanguage())) result.put("en", "");
-            }
-            else result.put("msg", text);
-            return result.toJSONString();
+            if (object != null) msg = object.getString("msg");
+        } catch (Exception ignored) {
         }
+        JSONObject result = new JSONObject();
+        result.put("msg", msg == null ? "" : msg);
+        return result.toJSONString();
     }
 
-    private void logSummaryDiagnostics(String uuid, String requestedModel, String systemPrompt,
-                                       CopilotRequest req, ChatResponse response, String raw) {
-        int historyMessageCount = 0;
-        long historyChars = 0;
-        long historyFormatChars = 0;
-        Map<Integer, Integer> historyFormatCodePoints = new TreeMap<>();
-        if (req != null && req.getHistoryMessages() != null) {
-            for (HistoryMessage message : req.getHistoryMessages()) {
-                if (message == null) continue;
-                historyMessageCount++;
-                String content = message.getContent() == null ? "" : message.getContent();
-                historyChars += codePointLength(content);
-                historyFormatChars += countFormatChars(content);
-                appendFormatCodePointCounts(historyFormatCodePoints, content);
-            }
-        }
-
-        String currentMessage = req == null || req.getCurrentMessage() == null ? "" : req.getCurrentMessage();
-        SummaryOutputDiagnostics output = inspectSummaryOutput(raw);
-        TokenUsage usage = response == null ? null : response.tokenUsage();
-        log.info("[Copilot] summary-diagnostics uuid={} requestedModel={} responseModel={} finishReason={} " +
-                        "inputTokens={} outputTokens={} totalTokens={} systemPromptChars={} systemPromptFormatChars={} " +
-                        "historyMessages={} historyChars={} historyFormatChars={} historyFormatCodePoints={} " +
-                        "currentMessageChars={} currentMessageFormatChars={} rawChars={} rawFormatChars={} " +
-                        "rawJsonObject={} hasZh={} zhChars={} zhLooksJson={} hasEn={} enChars={} jsonErrorType={}",
-                uuid,
-                requestedModel,
-                response == null ? null : response.modelName(),
-                response == null ? null : response.finishReason(),
-                usage == null ? null : usage.inputTokenCount(),
-                usage == null ? null : usage.outputTokenCount(),
-                usage == null ? null : usage.totalTokenCount(),
-                codePointLength(systemPrompt),
-                countFormatChars(systemPrompt),
-                historyMessageCount,
-                historyChars,
-                historyFormatChars,
-                formatCodePointSummary(historyFormatCodePoints),
-                codePointLength(currentMessage),
-                countFormatChars(currentMessage),
-                codePointLength(raw),
-                countFormatChars(raw),
-                output.jsonObject(),
-                output.hasZh(),
-                output.zhChars(),
-                output.zhLooksJson(),
-                output.hasEn(),
-                output.enChars(),
-                output.jsonErrorType());
-    }
-
-    private SummaryOutputDiagnostics inspectSummaryOutput(String raw) {
+    private String normalizeSummaryReply(String raw, boolean bilingual) {
         try {
-            JSONObject object = JSON.parseObject(stripJsonFence(raw == null ? "" : raw.trim()));
-            if (object == null) {
-                return new SummaryOutputDiagnostics(false, false, false, 0, 0, false, "not_json_object");
+            JSONObject object = JSON.parseObject(stripJsonFence(raw));
+            if (object == null || !(object.get("zh") instanceof String zh) || zh.isBlank()) return null;
+            JSONObject result = JSONObject.of("zh", zh.trim());
+            if (bilingual) {
+                if (!(object.get("en") instanceof String en) || en.isBlank()) return null;
+                result.put("en", en.trim());
             }
-            String zh = object.getString("zh");
-            String en = object.getString("en");
-            return new SummaryOutputDiagnostics(true, object.containsKey("zh"), object.containsKey("en"),
-                    codePointLength(zh), codePointLength(en), zh != null && zh.stripLeading().startsWith("{"), null);
+            return result.toJSONString();
         } catch (Exception e) {
-            return new SummaryOutputDiagnostics(false, false, false, 0, 0, false,
-                    e.getClass().getSimpleName());
+            return null;
         }
     }
 
     private String stripJsonFence(String text) {
-        if (text == null) return "";
-        return text.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "").trim();
-    }
-
-    private int codePointLength(String text) {
-        return text == null ? 0 : text.codePointCount(0, text.length());
-    }
-
-    private int countFormatChars(String text) {
-        if (text == null || text.isEmpty()) return 0;
-        int count = 0;
-        for (int offset = 0; offset < text.length();) {
-            int codePoint = text.codePointAt(offset);
-            if (Character.getType(codePoint) == Character.FORMAT) count++;
-            offset += Character.charCount(codePoint);
-        }
-        return count;
-    }
-
-    private void appendFormatCodePointCounts(Map<Integer, Integer> counts, String text) {
-        if (text == null || text.isEmpty()) return;
-        for (int offset = 0; offset < text.length();) {
-            int codePoint = text.codePointAt(offset);
-            if (Character.getType(codePoint) == Character.FORMAT) counts.merge(codePoint, 1, Integer::sum);
-            offset += Character.charCount(codePoint);
-        }
-    }
-
-    private String formatCodePointSummary(Map<Integer, Integer> counts) {
-        if (counts.isEmpty()) return "none";
-        StringBuilder summary = new StringBuilder();
-        int shown = 0;
-        for (Map.Entry<Integer, Integer> entry : counts.entrySet()) {
-            if (shown == 12) {
-                summary.append(",more");
-                break;
-            }
-            if (summary.length() > 0) summary.append(',');
-            String hex = Integer.toHexString(entry.getKey()).toUpperCase(Locale.ROOT);
-            summary.append("U+").append("0".repeat(Math.max(0, 4 - hex.length())))
-                    .append(hex).append(':').append(entry.getValue());
-            shown++;
-        }
-        return summary.toString();
-    }
-
-    private record SummaryOutputDiagnostics(boolean jsonObject, boolean hasZh, boolean hasEn,
-                                            int zhChars, int enChars, boolean zhLooksJson,
-                                            String jsonErrorType) {
-    }
-
-    private Set<String> allowedTagKeys(CopilotRequest req, Agent agent) {
-        Set<String> configured = new LinkedHashSet<>();
-        if (agent != null && agent.getTagStageKeys() != null && !agent.getTagStageKeys().isBlank()) {
-            try {
-                JSONArray values = JSON.parseArray(agent.getTagStageKeys());
-                if (values != null) values.forEach(x -> configured.add(String.valueOf(x)));
-            } catch (Exception ignored) { }
-        }
-        JSONObject tagPrompts = parseTagStagePrompts(agent == null ? null : agent.getTagStagePrompts());
-        Set<String> conditioned = new LinkedHashSet<>();
-        for (String key : configured) {
-            String prompt = tagPrompts.getString(key);
-            if (prompt != null && !prompt.isBlank()) conditioned.add(key);
-        }
-        Set<String> allowed = new LinkedHashSet<>();
-        if (req != null && req.getTagOptions() != null) {
-            req.getTagOptions().forEach(x -> {
-                if (x != null && x.getKey() != null && conditioned.contains(x.getKey())) {
-                    allowed.add(x.getKey());
-                }
-            });
-        } else {
-            allowed.addAll(conditioned);
-        }
-        return allowed;
-    }
-
-    /** 模型有时会用这些占位词表示「没有」，不能当作抽取到的值。 */
-    private static final Set<String> EXTRACT_EMPTY_PLACEHOLDERS =
-            Set.of("null", "none", "n/a", "unknown", "未知", "未提供", "未提及", "不详");
-
-    private String normalizeExtractReply(String jsonText, CopilotRequest req) {
-        JSONObject object = JSON.parseObject(jsonText);
-        JSONObject source = object == null ? null : object.getJSONObject("fields");
-        Set<String> allowed = allowedExtractKeys(req);
-        JSONObject fields = new JSONObject();
-        if (source != null) {
-            for (Map.Entry<String, Object> entry : source.entrySet()) {
-                String key = entry.getKey() == null ? "" : entry.getKey().trim();
-                if (!allowed.contains(key)) continue;
-                String value = extractValueText(entry.getValue());
-                if (!value.isEmpty()) fields.put(key, value);
-            }
-        }
-        JSONObject reply = new JSONObject();
-        reply.put("fields", fields);
-        return reply.toJSONString();
-    }
-
-    private Set<String> allowedExtractKeys(CopilotRequest req) {
-        Set<String> allowed = new LinkedHashSet<>();
-        if (req != null && req.getExtractOptions() != null) {
-            for (CopilotRequest.ExtractOption option : req.getExtractOptions()) {
-                if (option != null && option.getKey() != null && !option.getKey().isBlank()) {
-                    allowed.add(option.getKey().trim());
-                }
-            }
-        }
-        return allowed;
-    }
-
-    private String extractValueText(Object value) {
-        if (value == null) return "";
-        String text;
-        if (value instanceof JSONArray) {
-            List<String> parts = new ArrayList<>();
-            for (Object item : (JSONArray) value) {
-                String part = item == null ? "" : String.valueOf(item).trim();
-                if (!part.isEmpty()) parts.add(part);
-            }
-            text = String.join("、", parts);
-        } else if (value instanceof Map) {
-            text = JSON.toJSONString(value);
-        } else {
-            text = String.valueOf(value).trim();
-        }
-        return EXTRACT_EMPTY_PLACEHOLDERS.contains(text.toLowerCase(Locale.ROOT)) ? "" : text;
+        return text.trim().replaceFirst("^```(?i:json)?\\s*", "")
+                .replaceFirst("\\s*```$", "").trim();
     }
 
     /**
      * 遍历 historyMessages，对每条含 image 的记录单独下载图片并注入为多模态 UserMessage。
      * <ul>
      *   <li>下载成功：追加一条 {@code UserMessage(TextContent + ImageContent)}，并记录 IMAGE_FETCH 成功步骤。</li>
-     *   <li>下载失败：不注入 UserMessage（system prompt 文本里已有「已附图：{url}」占位），只记录 IMAGE_FETCH 失败步骤。</li>
+     *   <li>下载失败：不注入 UserMessage（文本上下文里已有「已附图：{url}」占位），只记录 IMAGE_FETCH 失败步骤。</li>
      * </ul>
      * 单张图失败不影响其他图，更不阻塞 ReAct 主流程。
      */
@@ -553,31 +328,35 @@ public class CopilotRunner {
                     + " " + role + "] "
                     + (content.isBlank() ? "（图片）" : content);
 
-            try {
-                RemoteImageFetcher.FetchedImage img = remoteImageFetcher.fetch(url);
-                Image image = Image.builder()
-                        .base64Data(img.getBase64())
-                        .mimeType(img.getMimeType())
-                        .build();
-                messages.add(UserMessage.from(TextContent.from(prefix), ImageContent.from(image)));
-                String source;
-                if (img.isFromCache()) {
-                    source = "缓存命中";
-                } else if (img.isCached()) {
-                    source = "下载成功(已落盘)";
-                } else {
-                    source = "下载成功(落盘失败)";
-                }
-                appendStep(uuid, StepRecord.of(StepType.IMAGE_FETCH.getCode(),
-                        source + " url=" + url
-                                + " mime=" + img.getMimeType()
-                                + " bytes=" + img.getBytes()
-                                + " cost=" + img.getCostMs() + "ms"));
-            } catch (Exception e) {
-                log.warn("[Copilot] uuid={} 历史图片下载失败 url={}", uuid, url, e);
-                appendStep(uuid, StepRecord.of(StepType.IMAGE_FETCH.getCode(),
-                        "下载失败 url=" + url + " 原因=" + e.getMessage()));
+            appendImageMessage(uuid, url, prefix, messages);
+        }
+    }
+
+    private void appendImageMessage(String uuid, String url, String prefix, List<ChatMessage> messages) {
+        try {
+            RemoteImageFetcher.FetchedImage img = remoteImageFetcher.fetch(url);
+            Image image = Image.builder()
+                    .base64Data(img.getBase64())
+                    .mimeType(img.getMimeType())
+                    .build();
+            messages.add(UserMessage.from(TextContent.from(prefix), ImageContent.from(image)));
+            String source;
+            if (img.isFromCache()) {
+                source = "缓存命中";
+            } else if (img.isCached()) {
+                source = "下载成功(已落盘)";
+            } else {
+                source = "下载成功(落盘失败)";
             }
+            appendStep(uuid, StepRecord.of(StepType.IMAGE_FETCH.getCode(),
+                    source + " url=" + url
+                            + " mime=" + img.getMimeType()
+                            + " bytes=" + img.getBytes()
+                            + " cost=" + img.getCostMs() + "ms"));
+        } catch (Exception e) {
+            log.warn("[Copilot] uuid={} 历史图片下载失败 url={}", uuid, url, e);
+            appendStep(uuid, StepRecord.of(StepType.IMAGE_FETCH.getCode(),
+                    "下载失败 url=" + url + " 原因=" + e.getMessage()));
         }
     }
 
@@ -615,85 +394,48 @@ public class CopilotRunner {
         }
     }
 
-    private String buildSystemPrompt(Agent agent, CopilotRequest req, CopilotTaskType taskType) {
+    private String buildChatSystemPrompt(Agent agent, CopilotRequest req) {
         StringBuilder sb = new StringBuilder();
-        String taskPrompt = switch (taskType) {
-            case CHAT -> agent.getPrePrompt();
-            case REBACK -> agent.getRebackPrompt();
-            case COMPACT -> (agent.getCompactPrompt() == null || agent.getCompactPrompt().isBlank())
-                    ? "压缩以下历史对话，只保留未来继续沟通所需的信息：客户身份、车型、预算、需求、痛点、异议、承诺、预约信息和未完成事项。不要编造，不要输出分析过程。"
-                    : agent.getCompactPrompt();
-            case SUMMARIZE -> agent.getSummarizePrompt();
-            case EXTRACT -> agent.getExtractPrompt();
-            case TAG -> null;
-        };
+        String taskPrompt = agent.getPrePrompt();
         if (taskPrompt != null && !taskPrompt.isBlank()) {
             sb.append("\n\n## 当前功能 Prompt\n").append(renderPromptVars(taskPrompt, agent, req));
         }
-        if (taskType == CopilotTaskType.SUMMARIZE) {
-            sb.append("\n\n## 总结语言\n").append("zh_en".equalsIgnoreCase(agent.getSummarizeLanguage())
-                    ? "同时返回中文 zh 和英文 en。" : "只返回中文 zh。");
-        }
-        if (taskType == CopilotTaskType.TAG) {
-            sb.append("\n\n## 标签选择规则\n只能从以下允许标签中选择，可返回一个或多个；没有符合项时 stages 返回 []。msg 必须用简短文字说明判定依据；没有匹配标签时也要说明原因。\n");
-            Set<String> allowed = allowedTagKeys(req, agent);
-            JSONObject tagPrompts = parseTagStagePrompts(agent.getTagStagePrompts());
-            if (req != null && req.getTagOptions() != null) {
-                req.getTagOptions().forEach(x -> {
-                    if (x != null && x.getKey() != null && allowed.contains(x.getKey())) {
-                        sb.append("- ").append(x.getKey()).append("：")
-                                .append(x.getNameCn() == null ? "" : x.getNameCn()).append(" ")
-                                .append(x.getNameEn() == null ? "" : x.getNameEn()).append("\n")
-                                .append("  允许条件：")
-                                .append(tagPrompts.getString(x.getKey()) == null
-                                        ? "未配置条件，不能仅凭模糊意向标记。"
-                                        : tagPrompts.getString(x.getKey()))
-                                .append("\n");
-                    }
-                });
-            } else {
-                allowed.forEach(x -> sb.append("- ").append(x).append("\n")
-                        .append("  允许条件：").append(tagPrompts.getString(x) == null
-                                ? "未配置条件，不能仅凭模糊意向标记。" : tagPrompts.getString(x)).append("\n"));
-            }
-        }
+        // 拉一次启用状态文档，按 engageType 分两路使用：
+        //   1 → 进入「可用知识库目录」，等 LLM 通过工具按需检索
+        //   2 → 全文拼到「前置知识库」章节，主 Agent 直接可读，不走向量库
+        KnowledgeBundle kb = loadKnowledgeBundle(agent.getId());
 
-        if (taskType == CopilotTaskType.EXTRACT) {
-            sb.append("\n\n## 信息抽取规则\n")
-                    .append("只能抽取下列字段。信息必须来自客户本人在对话中明确说出的内容（客户转述，或客服复述后经客户确认，也算）；")
-                    .append("不得猜测、推断或编造；客服自己的姓名、电话、公司信息不属于客户信息。")
-                    .append("没有明确信息的字段不要返回，不要返回空字符串、null 或“未知”。")
-                    .append("同一字段多次出现时，以客户最新、最明确的说法为准。\n");
-            if (req != null && req.getExtractOptions() != null) {
-                for (CopilotRequest.ExtractOption option : req.getExtractOptions()) {
-                    if (option == null || option.getKey() == null || option.getKey().isBlank()) continue;
-                    sb.append("- ").append(option.getKey().trim()).append("：")
-                            .append(option.getNameCn() == null ? "" : option.getNameCn()).append(" ")
-                            .append(option.getNameEn() == null ? "" : option.getNameEn()).append("\n");
-                    if (option.getDescription() != null && !option.getDescription().isBlank()) {
-                        sb.append("  抽取说明：").append(option.getDescription().trim()).append("\n");
-                    }
-                }
-            }
+        if (kb.prependText != null && !kb.prependText.isEmpty()) {
+            sb.append("\n\n## 前置知识库（已全量提供，可直接引用）\n").append(kb.prependText);
         }
-
-        if (supportsKnowledgeBase(taskType)) {
-            // 拉一次启用状态文档，按 engageType 分两路使用：
-            //   1 → 进入「可用知识库目录」，等 LLM 通过工具按需检索
-            //   2 → 全文拼到「前置知识库」章节，主 Agent 直接可读，不走向量库
-            KnowledgeBundle kb = loadKnowledgeBundle(agent.getId());
-
-            if (kb.prependText != null && !kb.prependText.isEmpty()) {
-                sb.append("\n\n## 前置知识库（已全量提供，可直接引用）\n").append(kb.prependText);
-            }
-            if (kb.catalog != null && !kb.catalog.isEmpty()) {
-                sb.append("\n\n## 可用知识库目录（如需详情请调用工具）\n").append(kb.catalog);
-            }
-            sb.append("\n\n## 工具调用规则\n");
-            sb.append("- 前置知识库可直接引用，目录文档按需调用工具。\n");
-            sb.append("- [ID=xxx] 是文档 ragId；可用 search_knowledge_base 和 get_knowledge_document。\n");
-            sb.append("- 严禁凭空捏造知识库中没有的事实、参数、价格。\n");
+        if (kb.catalog != null && !kb.catalog.isEmpty()) {
+            sb.append("\n\n## 可用知识库目录（如需详情请调用工具）\n").append(kb.catalog);
         }
+        sb.append("\n\n## 工具调用规则\n");
+        sb.append("- 前置知识库可直接引用，目录文档按需调用工具。\n");
+        sb.append("- [ID=xxx] 是文档 ragId；可用 search_knowledge_base 和 get_knowledge_document。\n");
+        sb.append("- 严禁凭空捏造知识库中没有的事实、参数、价格。\n");
+        appendConversationContext(sb, req);
+        sb.append("\n\n## 系统固定输出格式\n")
+                .append("只返回合法 JSON 对象：{\"msg\":\"客户实际看到的回复\"}。");
+        return sb.toString();
+    }
+
+    private String buildSummarySystemPrompt(Agent agent, CopilotRequest req) {
+        String prompt = renderPromptVars(agent.getSummarizePrompt(), agent, req);
+        if (prompt == null || prompt.isBlank()) {
+            prompt = "根据对话中明确出现的信息，总结客户需求、沟通进展和待跟进事项。";
+        }
+        return prompt + "\n\n只返回合法 JSON 对象：" + (isBilingualSummary(agent)
+                ? "{\"zh\":\"中文总结\",\"en\":\"英文总结\"}。同时生成中文和英文。"
+                : "{\"zh\":\"中文总结\"}。只生成中文。");
+    }
+
+    private boolean isBilingualSummary(Agent agent) {
+        return "zh_en".equalsIgnoreCase(agent.getSummarizeLanguage());
+    }
+
+    private void appendConversationContext(StringBuilder sb, CopilotRequest req) {
         if (req.getHistorySummary() != null && !req.getHistorySummary().isBlank()) {
             sb.append("\n\n## 更早历史消息总结\n").append(req.getHistorySummary());
         }
@@ -719,31 +461,6 @@ public class CopilotRunner {
         }
         if (req.getOtherParams() != null && !req.getOtherParams().isEmpty()) {
             sb.append("\n\n## 客户信息\n").append(JSON.toJSONString(req.getOtherParams()));
-        }
-        sb.append("\n\n## 系统固定输出格式\n");
-        switch (taskType) {
-            case CHAT, REBACK -> sb.append("只返回合法 JSON 对象：{\"msg\":\"客户实际看到的回复\"}。");
-            case COMPACT -> sb.append("只返回合法 JSON 对象：{\"rsp\":\"压缩后的会话摘要\"}。");
-            case SUMMARIZE -> sb.append("只返回合法 JSON 对象：").append("zh_en".equalsIgnoreCase(agent.getSummarizeLanguage())
-                    ? "{\"zh\":\"中文总结\",\"en\":\"英文总结\"}。"
-                    : "{\"zh\":\"中文总结\"}。");
-            case TAG -> sb.append("只返回合法 JSON 对象：{\"stages\":[\"ice_breaking\"],\"msg\":\"说明标签判定依据；无匹配标签时说明原因\"}。stages 只能包含允许标签。");
-            case EXTRACT -> sb.append("只返回合法 JSON 对象：{\"fields\":{\"字段key\":\"抽取到的值\"}}。fields 只能包含允许的字段 key，值必须是字符串；没有任何可抽取信息时返回 {\"fields\":{}}。");
-        }
-        return sb.toString();
-    }
-
-    private boolean supportsKnowledgeBase(CopilotTaskType taskType) {
-        return taskType == CopilotTaskType.CHAT || taskType == CopilotTaskType.REBACK;
-    }
-
-    private JSONObject parseTagStagePrompts(String value) {
-        if (value == null || value.isBlank()) return new JSONObject();
-        try {
-            JSONObject prompts = JSON.parseObject(value);
-            return prompts == null ? new JSONObject() : prompts;
-        } catch (Exception ignored) {
-            return new JSONObject();
         }
     }
 

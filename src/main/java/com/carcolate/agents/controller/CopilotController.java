@@ -1,8 +1,8 @@
 package com.carcolate.agents.controller;
 
 import com.carcolate.agents.dto.CopilotRequest;
+import com.carcolate.agents.dto.GenerateRequest;
 import com.carcolate.agents.dto.TaskSnapshot;
-import com.carcolate.agents.domain.enums.CopilotTaskType;
 import com.carcolate.agents.response.CodeMsg;
 import com.carcolate.agents.response.Rsp;
 import com.carcolate.agents.service.CopilotService;
@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * Copilot 对话 API
@@ -106,47 +107,31 @@ public class CopilotController {
      */
     @PostMapping("chat")
     public Rsp<Map<String, String>> chat(@RequestBody CopilotRequest request) {
-        return submit(CopilotTaskType.CHAT, request);
-    }
-
-    @PostMapping("reback")
-    public Rsp<Map<String, String>> reback(@RequestBody CopilotRequest request) {
-        return submit(CopilotTaskType.REBACK, request);
-    }
-
-    @PostMapping("compact")
-    public Rsp<Map<String, String>> compact(@RequestBody CopilotRequest request) {
-        return submit(CopilotTaskType.COMPACT, request);
+        return submit(() -> copilotService.submit(request));
     }
 
     @PostMapping("summarize")
     public Rsp<Map<String, String>> summarize(@RequestBody CopilotRequest request) {
-        return submit(CopilotTaskType.SUMMARIZE, request);
+        return submit(() -> copilotService.summarize(request));
     }
 
-    @PostMapping("tag")
-    public Rsp<Map<String, String>> tag(@RequestBody CopilotRequest request) {
-        return submit(CopilotTaskType.TAG, request);
+    @PostMapping("generate")
+    public Rsp<Map<String, String>> generate(@RequestBody GenerateRequest request) {
+        return submit(() -> copilotService.generate(request));
     }
 
-    @PostMapping("extract")
-    public Rsp<Map<String, String>> extract(@RequestBody CopilotRequest request) {
-        return submit(CopilotTaskType.EXTRACT, request);
-    }
-
-    private Rsp<Map<String, String>> submit(CopilotTaskType taskType, CopilotRequest request) {
+    private Rsp<Map<String, String>> submit(Supplier<String> task) {
         try {
-            String uuid = copilotService.submit(taskType, request);
+            String uuid = task.get();
             Map<String, String> data = new HashMap<>();
             data.put("uuid", uuid);
             return Rsp.success(data);
         } catch (IllegalArgumentException e) {
-            e.printStackTrace();
             return Rsp.error(CodeMsg.PARAM_ERROR);
         } catch (IllegalStateException e) {
             return Rsp.error(CodeMsg.AGENT_NOT_FOUND);
         } catch (Exception e) {
-            log.error("[Copilot] chat 提交失败", e);
+            log.error("[Copilot] 任务提交失败", e);
             return Rsp.error(CodeMsg.SERVER_RUN_Exception(e.getMessage()));
         }
     }

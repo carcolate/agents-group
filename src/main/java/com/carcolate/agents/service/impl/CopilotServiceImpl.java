@@ -6,6 +6,7 @@ import com.carcolate.agents.domain.enums.CopilotTaskType;
 import com.carcolate.agents.domain.enums.StepType;
 import com.carcolate.agents.domain.enums.TaskStatus;
 import com.carcolate.agents.dto.CopilotRequest;
+import com.carcolate.agents.dto.GenerateRequest;
 import com.carcolate.agents.dto.StepRecord;
 import com.carcolate.agents.dto.TaskSnapshot;
 import com.carcolate.agents.response.utils.RedisKeys;
@@ -39,14 +40,31 @@ public class CopilotServiceImpl implements CopilotService {
     private long ttlSeconds;
 
     @Override
-    public String submit(CopilotTaskType taskType, CopilotRequest request) {
-        if (taskType == null) taskType = CopilotTaskType.CHAT;
+    public String submit(CopilotRequest request) {
+        return submit(CopilotTaskType.CHAT, request, null);
+    }
+
+    @Override
+    public String summarize(CopilotRequest request) {
+        return submit(CopilotTaskType.SUMMARIZE, request, null);
+    }
+
+    @Override
+    public String generate(GenerateRequest request) {
+        if (request == null || request.systemPrompt() == null || request.systemPrompt().isBlank()
+                || request.userPrompt() == null || request.userPrompt().isBlank()) {
+            throw new IllegalArgumentException("systemPrompt 和 userPrompt 必填");
+        }
+        CopilotRequest context = new CopilotRequest();
+        context.setAgentId(request.agentId());
+        context.setUserId(request.userId());
+        context.setCurrentMessage(request.userPrompt());
+        return submit(CopilotTaskType.GENERATE, context, request);
+    }
+
+    private String submit(CopilotTaskType taskType, CopilotRequest request, GenerateRequest generation) {
         if (request == null || request.getAgentId() == null) {
             throw new IllegalArgumentException("agentId 必填");
-        }
-        if (taskType == CopilotTaskType.EXTRACT
-                && (request.getExtractOptions() == null || request.getExtractOptions().isEmpty())) {
-            throw new IllegalArgumentException("extract 任务必须提供 extractOptions");
         }
         Agent agent = agentService.getById(request.getAgentId());
         if (agent == null || agent.getStatus() == null || agent.getStatus() != 1) {
@@ -67,7 +85,7 @@ public class CopilotServiceImpl implements CopilotService {
                 ttlSeconds,
                 TimeUnit.SECONDS
         );
-        copilotRunner.run(uuid, agent, request, taskType);
+        copilotRunner.run(uuid, agent, request, taskType, generation);
         return uuid;
     }
 
@@ -106,7 +124,7 @@ public class CopilotServiceImpl implements CopilotService {
         );
         // 2) 立即在 snapshot 上落一条"中断请求"步骤，前端轮询能马上看到反馈
         snap.getSteps().add(StepRecord.of(StepType.ERROR.getCode(),
-                "已收到中断请求，等待 ReAct 当前轮结束后退出"));
+                "已收到中断请求，等待当前模型调用结束后退出"));
         redisTemplate.opsForValue().set(
                 RedisKeys.copilotTask(uuid),
                 snap,

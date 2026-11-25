@@ -1,20 +1,21 @@
 package com.carcolate.agents.service;
 
 import com.carcolate.agents.dto.CopilotRequest;
+import com.carcolate.agents.dto.GenerateRequest;
 import com.carcolate.agents.dto.TaskSnapshot;
-import com.carcolate.agents.domain.enums.CopilotTaskType;
 
 public interface CopilotService {
 
     /**
      * 创建一个 Copilot 任务，立即返回 uuid（任务在后台异步推进）
      */
-    default String submit(CopilotRequest request) {
-        return submit(CopilotTaskType.CHAT, request);
-    }
+    String submit(CopilotRequest request);
 
-    /** 创建指定业务类型的异步任务。 */
-    String submit(CopilotTaskType taskType, CopilotRequest request);
+    /** 创建客户信息总结任务。 */
+    String summarize(CopilotRequest request);
+
+    /** 创建单次模型调用任务。 */
+    String generate(GenerateRequest request);
 
     /**
      * 按 uuid 获取任务快照

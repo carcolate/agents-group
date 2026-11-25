@@ -6,11 +6,8 @@ import lombok.Getter;
 @Getter
 public enum CopilotTaskType {
     CHAT("chat"),
-    REBACK("reback"),
-    COMPACT("compact"),
     SUMMARIZE("summarize"),
-    TAG("tag"),
-    EXTRACT("extract");
+    GENERATE("generate");
 
     private final String code;
 

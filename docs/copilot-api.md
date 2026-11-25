@@ -54,57 +54,36 @@
 | 方法 | 路径 | 功能 | 使用的 Prompt | 知识库 |
 |---|---|---|---|---|
 | POST | /copilot/chat | 实时回复 | 仅主 Prompt（prePrompt） | 支持 |
-| POST | /copilot/reback | 客户回访消息 | 仅回访 Prompt（rebackPrompt） | 支持 |
-| POST | /copilot/compact | 会话压缩 | 仅压缩 Prompt（compactPrompt）；为空使用默认 Prompt | 不使用 |
-| POST | /copilot/summarize | 客户信息总结 | 仅总结 Prompt（summarizePrompt） | 不使用 |
-| POST | /copilot/tag | 客户标签判断 | 仅系统生成的标签规则和标签条件 | 不使用 |
-| POST | /copilot/extract | 客户信息提取 | 提取 Prompt（extractPrompt）+ 系统根据 extractOptions 生成的字段规则 | 不使用 |
+| POST | /copilot/summarize | 客户信息总结 | Agent 的 summarizePrompt，按 summarizeLanguage 输出 | 不使用 |
+| POST | /copilot/generate | 单次模型生成 | 调用方传入系统和用户 Prompt | 不使用 |
 | GET | /copilot/result?uuid={uuid} | 通用任务结果查询 | - | - |
 | GET | /copilot/chat/result?uuid={uuid} | 结果查询兼容路径 | - | - |
 | POST | /copilot/chat/cancel?uuid={uuid} | 请求中断任务 | - | - |
 
-### 2.1 Prompt 隔离规则
+### 2.1 Prompt 与知识库
 
-每类功能只使用自己的 Prompt，不把主 Prompt 拼接到其他功能中：
+`chat` 使用 Agent 的主 Prompt，并从历史摘要、历史消息和客户参数构建会话上下文。AgentGroup 会检查启用文档的 URL 刷新。engageType=1 的文档按需检索，engageType=2 的文档全文注入。
 
-| 任务 | 实际使用内容 |
-|---|---|
-| chat | prePrompt |
-| reback | rebackPrompt |
-| compact | compactPrompt；为空时使用系统默认压缩 Prompt |
-| summarize | summarizePrompt |
-| tag | 根据 Agent 勾选标签和每个标签的条件自动生成，不读取 prePrompt |
-| extract | extractPrompt；系统再根据请求 extractOptions 生成字段规则（key、名称、抽取说明） |
+`summarize` 使用 Agent 的总结 Prompt 和历史对话进行单次模型调用。summarizeLanguage 为 zh_en 时返回中英双语，其余返回中文。
 
-公共上下文（请求中的历史摘要、历史消息、客户信息）仍会按任务注入。responseFormat 仅为历史兼容字段，运行时不读取；系统会根据任务类型追加固定输出格式。
-
-### 2.2 知识库使用范围
-
-只有 chat 和 reback 使用知识库：
-
-- 异步任务开始后，先检查并执行启用文档的 URL 自动刷新，再构建 Prompt。
-- engageType=1 的文档进入知识库目录，并可通过检索工具按需读取。
-- engageType=2 的文档全文注入前置知识库。
-- compact、summarize、tag、extract 不读取知识库、不注入知识库、不触发 URL 自动刷新，也不会收到 RAG 工具。
+`generate` 通过 agentId 选择启用的 Agent 和对应模型，只发起一次模型调用。调用方负责拼装上下文、约定输出格式并校验结果。AgentGroup 直接使用传入的 Prompt 和可选图片，返回模型文本。知识库和工具由 `chat` 使用。
 
 ## 3. Copilot 请求体
 
-六类提交接口共用 CopilotRequest。
+### Chat 和 Summarize 请求
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | agentId | Long | 是 | 已启用 Agent 的 ID |
 | userId | String | 否 | 调用方用户标识，仅写入调用历史，不参与 Prompt |
-| currentMessage | String | 否 | 当前消息。chat/reback 建议提供；compact/summarize/tag/extract 可以只依赖历史消息 |
+| currentMessage | String | 否 | 当前消息。建议提供 |
 | historyMessages | List<HistoryMessage> | 否 | 历史消息，建议按时间正序提交 |
 | historySummary | String | 否 | 更早历史消息的压缩摘要 |
 | otherParams | Map<String,Object> | 否 | 客户或业务参数，也会作为客户信息注入 Prompt |
-| tagOptions | List<TagOption> | 仅 tag 使用 | 当前 IM 允许使用的标签定义 |
-| extractOptions | List<ExtractOption> | 仅 extract 使用，且必填 | 当前账号允许抽取的字段定义：key、nameCn、nameEn、description（抽取说明）；缺失或为空时提交返回 400 |
 
-服务端当前只强制校验 agentId 存在且对应 Agent 已启用；空的 currentMessage 不会在提交阶段被拒绝。
+服务端校验 agentId 存在且对应 Agent 已启用。Chat 允许空的 currentMessage。
 
-### 3.1 请求示例
+### 3.1 Chat 和 Summarize 请求示例
 
 ~~~json
 {
@@ -181,13 +160,26 @@ POST /copilot/{task}
 Content-Type: application/json
 ~~~
 
-task 取值：
+任务类型可选 `chat`、`summarize` 或 `generate`。Chat 和 Summarize 请求体见第 3 节。
 
-- chat
-- reback
-- compact
-- summarize
-- tag
+`POST /copilot/generate` 请求字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| agentId | Long | 是 | 用来选择模型的启用 Agent |
+| userId | String | 否 | 调用方标识，写入调用历史 |
+| systemPrompt | String | 是 | 调用方组装的系统指令，包含所需的输出格式 |
+| userPrompt | String | 是 | 用户内容和任务上下文 |
+| attachments | Array | 否 | 可选图片。元素包含 URL 字符串 `url` 和可选的说明字符串 `caption` |
+
+~~~json
+{
+  "agentId": 836774729814085,
+  "userId": "819789371277381",
+  "systemPrompt": "总结这段对话，只返回 JSON 对象 {\"zh\":\"中文总结\"}。",
+  "userPrompt": "客户询问周末是否可以到店试驾。"
+}
+~~~
 
 ### 4.2 成功响应
 
@@ -203,94 +195,25 @@ task 取值：
 
 提交成功只代表任务已创建，不代表模型已经完成。
 
-### 4.3 固定最终输出格式
+### 4.3 最终输出
 
-固定格式写在结果快照的 finalReply 字段中。由于 TaskSnapshot.finalReply 类型是 String，调用方需要对 finalReply 再做一次 JSON 解析。
+任务结果通过 `GET /copilot/result?uuid={uuid}` 查询，成功时读取 `finalReply` 字符串。
 
-| 接口 | finalReply 的 JSON 字符串 |
+| 任务 | finalReply |
 |---|---|
-| /copilot/chat | {"msg":"客户实际看到的回复"} |
-| /copilot/reback | {"msg":"客户实际看到的回访消息"} |
-| /copilot/compact | {"rsp":"压缩后的会话摘要"} |
-| /copilot/summarize，语言为 zh | {"zh":"中文客户信息总结"} |
-| /copilot/summarize，语言为 zh_en | {"zh":"中文客户信息总结","en":"English customer summary"} |
-| /copilot/tag | {"stages":["stage_key_1","stage_key_2"],"msg":"标签判定理由"}；没有匹配项时 stages 为 []，msg 仍需说明原因 |
-| /copilot/extract | {"fields":{"customer_name":"张三","budget":"30万"}}；只包含抽取到的字段，没有抽取到任何信息时 fields 为 {} |
+| chat | 固定 JSON 字符串，例如 `{"msg":"周末可以到店试驾。"}`，调用方解析 `msg` |
+| summarize | JSON 字符串，中文为 `{"zh":"中文总结"}`，双语为 `{"zh":"中文总结","en":"English summary"}`。缺少配置语言的非空文本时，任务状态为 FAILED |
+| generate | 模型返回的原始文本。若调用方要求 JSON，由调用方校验并解析 |
 
-示例：
+Carcolate-IM 的会话压缩、标签判断和资料提取共用 `generate`。IM 为各任务生成输出指令。标签的判定条件在 IM 标签管理维护，Agent 配置负责选择参与判断的标签。
 
-~~~json
-{
-  "status": "SUCCESS",
-  "taskType": "chat",
-  "finalReply": "{\"msg\":\"这款目前优惠后大约30万元左右。\"}"
-}
-~~~
+AgentGroup 和 IM 后端需在同一次发布中更新。标签判定读取 IM 的 tb_stage.copilot_prompt。未填写条件的标签会跳过自动判定。
 
-不要把 finalReply 直接当作客服消息文本使用；chat/reback 应先解析 msg，compact 解析 rsp，summarize 解析 zh/en，tag 解析 JSON 数组，extract 解析 fields 对象。
-
-### 4.4 各功能返回示例
-
-#### chat
-
-~~~json
-{"msg":"这款目前优惠后大约30万元左右，我可以继续帮您确认具体配置。"}
-~~~
-
-#### reback
-
-~~~json
-{"msg":"您好，之前您关注的车型我这边已经可以继续帮您确认优惠了，您更关注价格还是配置呢？"}
-~~~
-
-#### compact
-
-~~~json
-{
-  "rsp": "客户关注新能源车，预算约30万元，重点询问价格和续航；客服已承诺确认优惠，尚未确定到店时间。"
-}
-~~~
-
-#### summarize
-
-中文模式：
-
-~~~json
-{
-  "zh": "客户来自摩洛哥，关注新能源车，预算约30万元，主要关注价格和续航，目前处于价格比较阶段。"
-}
-~~~
-
-中英模式：
-
-~~~json
-{
-  "zh": "客户来自摩洛哥，关注新能源车，预算约30万元，主要关注价格和续航。",
-  "en": "The customer is from Morocco and is interested in new energy vehicles, with a budget of around RMB 300,000. The main concerns are price and range."
-}
-~~~
-
-#### tag
-
-~~~json
-["pain_point","price_negotiation"]
-~~~
-
-AgentGroup 会对模型返回的标签再次过滤，只保留当前 Agent 允许、且请求 tagOptions 允许的标签。
-
-#### extract
-
-~~~json
-{"fields":{"customer_name":"张三","customer_phone_number":"13800138000","budget":"30万"}}
-~~~
-
-AgentGroup 会对模型返回的字段再次过滤：只保留请求 extractOptions 中声明的 key，值统一规整为字符串，并丢弃空值和“未知、null”等占位值；没有抽取到任何信息时返回 `{"fields":{}}`。
-
-### 4.5 提交错误
+### 4.4 提交错误
 
 | code | msg | 说明 |
 |---:|---|---|
-| 400 | 参数错误 | 请求为空、agentId 缺失，或 extract 任务缺少 extractOptions |
+| 400 | 参数错误 | 请求为空、agentId 缺失，或 generate 的 systemPrompt、userPrompt 为空 |
 | 600 | Agent不存在或已禁用 | Agent 不存在或 status != 1 |
 | 500004 | 业务异常：{详情} | 提交阶段发生其他服务异常；异步运行异常请查看任务的 errorMsg |
 
@@ -385,7 +308,7 @@ GET /copilot/chat/result?uuid={uuid}
 }
 ~~~
 
-systemPrompt 是本次实际提交给模型的 System Prompt 原文，可能包含功能 Prompt、历史内容、客户信息和 chat/reback 的知识库内容，调用方应按敏感数据处理。
+systemPrompt 是本次实际提交给模型的 System Prompt 原文，可能包含功能 Prompt、历史内容、客户信息和 chat 的知识库内容，调用方应按敏感数据处理。
 
 ### 5.3 TaskSnapshot
 
@@ -394,7 +317,7 @@ systemPrompt 是本次实际提交给模型的 System Prompt 原文，可能包�
 | uuid | String | 任务唯一标识 |
 | agentId | Long | Agent ID |
 | agentName | String | Agent 名称快照 |
-| taskType | String | chat、reback、compact、summarize、tag |
+| taskType | String | 新任务为 chat、summarize 或 generate。历史记录可能包含旧任务类型 |
 | modelName | String | 本次实际调用的模型；Agent 未配置时为全局模型列表第一项 |
 | status | String | RUNNING、SUCCESS、FAILED、CANCELLED |
 | finalReply | String | 成功时的固定格式 JSON 字符串 |
@@ -421,7 +344,7 @@ systemPrompt 是本次实际提交给模型的 System Prompt 原文，可能包�
 |---|---|
 | USER_INPUT | 提交的当前消息 |
 | LLM_THINK | 模型中间输出 |
-| TOOL_CALL | chat/reback 的 RAG 工具调用 |
+| TOOL_CALL | chat 的 RAG 工具调用 |
 | TOOL_RESULT | RAG 工具返回结果 |
 | IMAGE_FETCH | 历史图片下载或缓存命中记录 |
 | FINAL_REPLY | 固定格式最终结果，内容为 JSON 字符串 |
@@ -450,9 +373,9 @@ POST /copilot/chat/cancel?uuid={uuid}
 
 - 接口路径保留 chat/cancel 兼容名称。
 - Redis 会立即写入中断标记，并在快照追加中断请求步骤。
-- chat/reback 的 ReAct 循环在下一轮开始前检查标记，随后将任务置为 CANCELLED。
+- chat 的 ReAct 循环在下一轮开始前检查标记，随后将任务置为 CANCELLED。
 - 当前正在执行的模型 HTTP 请求无法被强制打断。
-- compact/summarize/tag 是单次模型调用；如果已经进入模型调用，取消不保证能阻止该次调用。
+- summarize 和 generate 在单次模型调用前后检查中断标记。已经发出的模型请求正常返回后，任务才会标记为 CANCELLED。
 
 错误：
 
@@ -522,15 +445,13 @@ Agent 管理请求和响应使用以下字段：
 | name | String | 新增必填；更新后不能为空 | Agent 名称 |
 | prePrompt | String | 新增必填；更新后不能为空 | chat 专用主 Prompt |
 | responseFormat | String | 可选 | 历史兼容字段，运行时不读取 |
-| rebackPrompt | String | 可选 | reback 专用 Prompt |
-| compactPrompt | String | 可选 | compact 专用 Prompt；为空使用默认值 |
+| compactPrompt | String | 可选 | 历史配置字段。IM 的会话压缩使用内置 Prompt |
 | summarizePrompt | String | 可选 | summarize 专用 Prompt |
 | summarizeLanguage | String | 可选 | zh 或 zh_en，新增时默认 zh |
 | tagStageKeys | String | 可选 | JSON 数组字符串，例如 ["invite_visit","deal_closed"] |
-| tagStagePrompts | String | 可选 | JSON 对象字符串，每个标签一个条件 Prompt |
 | otherParamKeys | String | 可选 | 逗号分隔的动态参数 key |
 | modelName | String | 可选 | Agent 专用模型；为空使用全局默认模型 |
-| maxSteps | int | 可选 | 1-20；新增时为空或非正数默认 6，主要用于 chat/reback |
+| maxSteps | int | 可选 | 1-20；新增时为空或非正数默认 6，主要用于 chat |
 | status | int | 可选 | 1 启用，0 停用；新增时默认 1 |
 | remark | String | 可选 | 备注 |
 | createdAt | Instant | 只读 | 创建时间 |
@@ -549,12 +470,9 @@ Content-Type: application/json
 {
   "name": "海外招商顾问",
   "prePrompt": "你是专业的海外招商顾问，负责引导合作商户。",
-  "rebackPrompt": "请根据客户历史意向生成自然的主动回访消息，不要催促客户。",
-  "compactPrompt": "",
   "summarizePrompt": "总结客户画像和当前合作状态，只使用对话中明确出现的信息。",
   "summarizeLanguage": "zh_en",
   "tagStageKeys": "[\"have_room\",\"invite_meet\",\"invite_visit\"]",
-  "tagStagePrompts": "{\"have_room\":\"当客户明确表示有线下展厅时，标记此标签。\",\"invite_meet\":\"当对话中明确约定会议时间且客户同意后，标记此标签。\",\"invite_visit\":\"当对话中提到明确到店时间并经客服确认后，标记此标签。\"}",
   "otherParamKeys": "userArea,customerType",
   "modelName": "qwen3.6-plus",
   "maxSteps": 6,
@@ -563,7 +481,7 @@ Content-Type: application/json
 }
 ~~~
 
-tagStageKeys 和 tagStagePrompts 是 Agent 表中的字符串字段，因此请求中应传 JSON 字符串，而不是直接传数组或对象。
+tagStageKeys 是 Agent 表中的字符串字段，请求中传入序列化后的 JSON 数组字符串。
 
 ### 7.5 Agent 更新、删除
 
@@ -592,7 +510,6 @@ Content-Type: application/json
 - maxSteps 必须在 1-20。
 - status 只能是 0 或 1。
 - summarizeLanguage 只能是 zh 或 zh_en。
-- tagStagePrompts 如果传入，必须是 JSON 对象，且每个值不能为空。
 
 删除：
 
@@ -625,7 +542,7 @@ AgentGroup 删除 Agent 时会删除其知识库记录，并重建该 Agent 的�
 | content | String | 通常必填 | Markdown 或纯文本；开启 URL 刷新时会被 URL 响应正文覆盖 |
 | url | String | 可选 | 自动刷新来源 URL |
 | autoRefresh | int | 可选 | 1 开启，0 关闭，默认 0 |
-| refreshIntervalMinutes | int | 可选 | 刷新间隔，默认 60；0 表示每次 chat/reback 请求都检查刷新 |
+| refreshIntervalMinutes | int | 可选 | 刷新间隔，默认 60；0 表示每次 chat 请求都检查刷新 |
 | lastRefreshTime | Instant | 只读 | 最近一次成功 URL 刷新时间 |
 | summary | String | 可选 | engageType=1 时为空会自动生成目录摘要 |
 | engageType | int | 可选 | 1 AI 自检索，2 前置全文注入，默认 1 |
@@ -683,7 +600,7 @@ Content-Type: application/json
 
 运行时：
 
-1. 仅 chat/reback 任务会在异步任务内部检查 URL 刷新。
+1. 仅 chat 任务会在异步任务内部检查 URL 刷新。
 2. 只检查启用的知识库文档。
 3. refreshIntervalMinutes=0 或没有成功刷新记录时立即刷新。
 4. 其他正数表示距 lastRefreshTime 达到对应分钟后刷新。
@@ -695,20 +612,20 @@ Content-Type: application/json
 engageType=1：AI 自检索。
 
 - 启用文档摘要会放入 System Prompt 的知识库目录。
-- chat/reback 可以调用 search_knowledge_base 按语义检索。
+- chat 可以调用 search_knowledge_base 按语义检索。
 - 文档内容会进入内存向量索引。
 
 engageType=2：前置知识库。
 
 - 启用文档全文直接放入 System Prompt。
 - 不进入向量索引。
-- 仅 chat/reback 可见。
+- 仅 chat 可见。
 
-无论参与方式为何，compact/summarize/tag 都不会加载这些文档。
+知识库文档由 chat 加载。
 
 ### 8.6 Copilot 可用的知识库工具
 
-工具只会提供给 chat/reback。
+工具只会提供给 chat。
 
 search_knowledge_base：
 
@@ -837,4 +754,4 @@ GET /manage/copilot/history/list?pageNum=1&pageSize=20&agentId=1&status=SUCCESS&
 6. status=FAILED 或 CANCELLED 时读取 errorMsg
 ~~~
 
-chat/reback 可能包含多轮 LLM_THINK、TOOL_CALL、TOOL_RESULT；compact/summarize/tag 使用单次模型调用，通常只产生一次模型步骤和一次 FINAL_REPLY。
+chat 可能包含多轮 LLM_THINK、TOOL_CALL、TOOL_RESULT。summarize 和 generate 使用单次模型调用，成功时记录一次模型步骤和一次 FINAL_REPLY。
